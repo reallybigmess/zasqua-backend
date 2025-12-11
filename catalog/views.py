@@ -3,8 +3,8 @@ REST API Views for Zasqua Catalog.
 """
 
 from django.db.models import Q
-from rest_framework import viewsets, filters
-from rest_framework.decorators import action
+from rest_framework import viewsets, filters, status
+from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 
 from .models import Repository, Description, Entity, Place
@@ -14,6 +14,7 @@ from .serializers import (
     DescriptionTreeSerializer, EntitySerializer, PlaceSerializer,
     SearchResultSerializer
 )
+from . import search as search_service
 
 
 class RepositoryViewSet(viewsets.ReadOnlyModelViewSet):
@@ -254,3 +255,93 @@ class PlaceViewSet(viewsets.ReadOnlyModelViewSet):
         descriptions = [link.description for link in links]
         serializer = DescriptionListSerializer(descriptions, many=True)
         return Response(serializer.data)
+
+
+@api_view(['GET'])
+def meilisearch_search(request):
+    """
+    Full-text search using Meilisearch.
+
+    Query params:
+        q: Search query (required)
+        repository: Filter by repository code
+        level: Filter by description level
+        date_from: Filter by date range start (year)
+        date_to: Filter by date range end (year)
+        sort: Sort field (date_start_year:asc, date_start_year:desc, title:asc)
+        page: Page number (default 1)
+        per_page: Results per page (default 50, max 100)
+
+    Returns:
+        hits: List of matching documents with highlights
+        facets: Facet counts for filtering
+        total: Total number of matches
+        page: Current page
+        total_pages: Total number of pages
+    """
+    query = request.query_params.get('q', '').strip()
+    if not query:
+        return Response(
+            {'error': 'Search query (q) is required'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Build filters
+    filters = {}
+    if request.query_params.get('repository'):
+        filters['repository_code'] = request.query_params.get('repository')
+    if request.query_params.get('level'):
+        filters['description_level'] = request.query_params.get('level')
+    if request.query_params.get('date_from'):
+        try:
+            filters['date_from'] = int(request.query_params.get('date_from'))
+        except ValueError:
+            pass
+    if request.query_params.get('date_to'):
+        try:
+            filters['date_to'] = int(request.query_params.get('date_to'))
+        except ValueError:
+            pass
+
+    # Pagination
+    try:
+        page = max(1, int(request.query_params.get('page', 1)))
+    except ValueError:
+        page = 1
+    try:
+        per_page = min(100, max(1, int(request.query_params.get('per_page', 50))))
+    except ValueError:
+        per_page = 50
+
+    # Sort
+    sort_param = request.query_params.get('sort')
+    sort = [sort_param] if sort_param else None
+
+    try:
+        results = search_service.search(
+            query=query,
+            filters=filters,
+            sort=sort,
+            page=page,
+            per_page=per_page
+        )
+
+        # Format response
+        total = results.get('estimatedTotalHits', 0)
+        total_pages = (total + per_page - 1) // per_page if total > 0 else 0
+
+        return Response({
+            'query': query,
+            'hits': results.get('hits', []),
+            'facets': results.get('facetDistribution', {}),
+            'total': total,
+            'page': page,
+            'per_page': per_page,
+            'total_pages': total_pages,
+            'processing_time_ms': results.get('processingTimeMs', 0),
+        })
+    except Exception as e:
+        return Response(
+            {'error': f'Search error: {str(e)}'},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
