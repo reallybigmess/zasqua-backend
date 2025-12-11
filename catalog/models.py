@@ -79,7 +79,7 @@ class Description(MPTTModel):
                             null=True, blank=True, related_name='children')
 
     # --- Classification ---
-    level = models.CharField(max_length=20, choices=Level.choices)
+    description_level = models.CharField(max_length=20, choices=Level.choices)
     resource_type = models.CharField(max_length=20, choices=ResourceType.choices,
                                      blank=True)
     genre = models.JSONField(default=list, blank=True)  # Getty AAT terms

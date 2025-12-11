@@ -66,9 +66,9 @@ class DescriptionViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(repository_id=repository_id)
 
         # Filter by level
-        level = self.request.query_params.get('level')
-        if level:
-            queryset = queryset.filter(level=level)
+        description_level = self.request.query_params.get('level')
+        if description_level:
+            queryset = queryset.filter(description_level=description_level)
 
         # Filter by parent (for browsing hierarchy)
         parent_id = self.request.query_params.get('parent')

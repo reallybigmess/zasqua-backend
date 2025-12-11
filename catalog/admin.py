@@ -54,9 +54,9 @@ class DescriptionAdmin(MPTTModelAdmin):
     Essential fields visible, rest collapsed by ISAD(G) area.
     """
 
-    list_display = ['title_short', 'reference_code', 'repository', 'level',
+    list_display = ['title_short', 'reference_code', 'repository', 'description_level',
                     'date_expression', 'is_published']
-    list_filter = ['repository', 'level', 'resource_type', 'is_published',
+    list_filter = ['repository', 'description_level', 'resource_type', 'is_published',
                    'needs_review', 'has_digital']
     search_fields = ['title', 'reference_code', 'local_identifier',
                      'scope_content', 'creator_display']
@@ -72,7 +72,7 @@ class DescriptionAdmin(MPTTModelAdmin):
             'fields': (
                 'repository',
                 'parent',
-                ('level', 'resource_type'),
+                ('description_level', 'resource_type'),
                 ('reference_code', 'local_identifier'),
                 'title',
                 'translated_title',

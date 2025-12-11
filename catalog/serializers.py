@@ -91,7 +91,7 @@ class DescriptionListSerializer(serializers.ModelSerializer):
         model = Description
         fields = [
             'id', 'repository_code', 'reference_code', 'local_identifier',
-            'title', 'level', 'date_expression',
+            'title', 'description_level', 'date_expression',
             'has_children', 'child_count', 'has_digital'
         ]
 
@@ -121,7 +121,7 @@ class DescriptionDetailSerializer(serializers.ModelSerializer):
             {
                 'id': a.id,
                 'title': a.title[:80] + '...' if len(a.title) > 80 else a.title,
-                'level': a.level
+                'description_level': a.description_level
             }
             for a in ancestors
         ]
@@ -148,7 +148,7 @@ class DescriptionTreeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Description
-        fields = ['id', 'title', 'reference_code', 'level', 'children']
+        fields = ['id', 'title', 'reference_code', 'description_level', 'children']
 
     def get_children(self, obj):
         """Recursively serialize children (with depth limit)."""
@@ -171,7 +171,7 @@ class SearchResultSerializer(serializers.ModelSerializer):
         model = Description
         fields = [
             'id', 'repository_code', 'reference_code', 'local_identifier',
-            'title', 'level', 'date_expression', 'scope_content',
+            'title', 'description_level', 'date_expression', 'scope_content',
             'creator_display', 'breadcrumb_text'
         ]
 
