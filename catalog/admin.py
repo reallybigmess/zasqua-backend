@@ -10,7 +10,7 @@ from django.contrib import admin
 from mptt.admin import MPTTModelAdmin
 
 from .models import (
-    Repository, Description, Entity, Place,
+    Repository, Description, Entity, EntityFunction, Place,
     DescriptionEntity, DescriptionPlace
 )
 
@@ -20,6 +20,7 @@ class DescriptionEntityInline(admin.TabularInline):
     model = DescriptionEntity
     extra = 1
     autocomplete_fields = ['entity']
+    fields = ['entity', 'role', 'honorific', 'function', 'name_as_recorded', 'sequence']
 
 
 class DescriptionPlaceInline(admin.TabularInline):
@@ -187,19 +188,31 @@ class DescriptionAdmin(MPTTModelAdmin):
     title_short.short_description = 'Title'
 
 
+class EntityFunctionInline(admin.TabularInline):
+    """Inline for known functions/positions held by an entity."""
+    model = EntityFunction
+    extra = 0
+    fields = ['function', 'honorific', 'date_start', 'date_end',
+              'date_note', 'certainty', 'source']
+
+
 @admin.register(Entity)
 class EntityAdmin(admin.ModelAdmin):
-    list_display = ['display_name', 'entity_type', 'dates_of_existence',
-                    'needs_review']
+    list_display = ['entity_code', 'display_name', 'entity_type', 'primary_function',
+                    'dates_of_existence', 'needs_review']
     list_filter = ['entity_type', 'needs_review']
-    search_fields = ['display_name', 'sort_name', 'name_variants']
+    search_fields = ['entity_code', 'display_name', 'sort_name', 'name_variants', 'primary_function']
     ordering = ['sort_name']
+    readonly_fields = ['entity_code']
+    inlines = [EntityFunctionInline]
 
     fieldsets = (
         (None, {
             'fields': (
+                'entity_code',
                 ('display_name', 'sort_name'),
                 'entity_type',
+                ('honorific', 'primary_function'),
                 'name_variants',
             )
         }),
@@ -290,11 +303,33 @@ class PlaceAdmin(admin.ModelAdmin):
 
 @admin.register(DescriptionEntity)
 class DescriptionEntityAdmin(admin.ModelAdmin):
-    list_display = ['description', 'entity', 'role', 'sequence', 'needs_review']
+    list_display = ['description', 'entity', 'role', 'function', 'sequence', 'needs_review']
     list_filter = ['role', 'needs_review']
-    search_fields = ['description__title', 'entity__display_name']
+    search_fields = ['description__title', 'entity__display_name', 'function', 'name_as_recorded']
     autocomplete_fields = ['description', 'entity']
     ordering = ['description', 'sequence']
+
+    fieldsets = (
+        (None, {
+            'fields': (
+                'description',
+                'entity',
+                'role',
+                'role_note',
+                'sequence',
+            )
+        }),
+        ('Documentary Styling', {
+            'fields': (
+                ('honorific', 'function'),
+                'name_as_recorded',
+            )
+        }),
+        ('Workflow', {
+            'classes': ('collapse',),
+            'fields': ('needs_review',)
+        }),
+    )
 
 
 @admin.register(DescriptionPlace)
@@ -304,3 +339,35 @@ class DescriptionPlaceAdmin(admin.ModelAdmin):
     search_fields = ['description__title', 'place__label']
     autocomplete_fields = ['description', 'place']
     ordering = ['description']
+
+
+@admin.register(EntityFunction)
+class EntityFunctionAdmin(admin.ModelAdmin):
+    """Admin for known functions/positions (interpretation layer)."""
+    list_display = ['entity', 'function', 'date_start', 'date_end', 'certainty']
+    list_filter = ['certainty']
+    search_fields = ['entity__display_name', 'function', 'source']
+    autocomplete_fields = ['entity']
+    ordering = ['entity__sort_name', 'date_start']
+
+    fieldsets = (
+        (None, {
+            'fields': (
+                'entity',
+                ('function', 'honorific'),
+            )
+        }),
+        ('Dates', {
+            'fields': (
+                ('date_start', 'date_end'),
+                'date_note',
+            )
+        }),
+        ('Provenance', {
+            'fields': (
+                'certainty',
+                'source',
+                'notes',
+            )
+        }),
+    )

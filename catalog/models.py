@@ -10,9 +10,27 @@ Zasqua Catalog Models
 - DescriptionPlace: Junction with typed roles
 """
 
+import secrets
+import string
+
 from django.db import models
 from django.contrib.auth.models import User
 from mptt.models import MPTTModel, TreeForeignKey
+
+
+def generate_neogranadina_code(prefix='ne', length=5):
+    """
+    Generate a unique Neogranadina identifier code.
+
+    Format: {prefix}-{alphanumeric}
+    - ne-xxxxx for entities (entidad)
+    - nl-xxxxx for places (lugar)
+    - nd-xxxxx for descriptions (documento)
+    """
+    # Lowercase + digits, removing ambiguous chars (0/o, 1/l)
+    alphabet = 'abcdefghijkmnpqrstuvwxyz23456789'  # 32 chars
+    code = ''.join(secrets.choice(alphabet) for _ in range(length))
+    return f'{prefix}-{code}'
 
 
 class Repository(models.Model):
@@ -186,9 +204,15 @@ class Entity(models.Model):
         CORPORATE = 'corporate', 'Entidad corporativa'
 
     # --- Identity (ISAAR 5.1) ---
+    entity_code = models.CharField(max_length=8, blank=True, null=True, db_index=True,
+                                   help_text='Unique identifier (ne-xxxxx) for URLs and citations')
     display_name = models.CharField(max_length=500, db_index=True)
     sort_name = models.CharField(max_length=500, db_index=True)
     entity_type = models.CharField(max_length=20, choices=EntityType.choices)
+    honorific = models.CharField(max_length=100, blank=True,
+                                 help_text='Primary form of address (Don, Fray, Dr.)')
+    primary_function = models.CharField(max_length=300, blank=True,
+                                        help_text='Most notable office/role (Gobernador de Popayán)')
 
     # --- Variants ---
     name_variants = models.JSONField(default=list, blank=True)
@@ -226,8 +250,68 @@ class Entity(models.Model):
         verbose_name_plural = 'entities'
         ordering = ['sort_name']
 
+    def save(self, *args, **kwargs):
+        if not self.entity_code:
+            # Generate unique ne-xxxxx code, retry if collision
+            for _ in range(10):
+                code = generate_neogranadina_code(prefix='ne', length=5)
+                if not Entity.objects.filter(entity_code=code).exists():
+                    self.entity_code = code
+                    break
+            else:
+                raise ValueError("Could not generate unique entity_code")
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return self.display_name
+
+
+class EntityFunction(models.Model):
+    """
+    Known functions/offices held by an entity over time.
+    Interpretation layer - synthesized from documents or external sources.
+    """
+
+    class Certainty(models.TextChoices):
+        CERTAIN = 'certain', 'Cierto'
+        PROBABLE = 'probable', 'Probable'
+        POSSIBLE = 'possible', 'Posible'
+
+    entity = models.ForeignKey(Entity, on_delete=models.CASCADE,
+                               related_name='known_functions')
+
+    # The function held
+    honorific = models.CharField(max_length=100, blank=True,
+                                 help_text='Associated honorific if known')
+    function = models.CharField(max_length=300,
+                                help_text='The office, rank, or role held')
+
+    # Temporal bounds
+    date_start = models.DateField(null=True, blank=True)
+    date_end = models.DateField(null=True, blank=True)
+    date_note = models.CharField(max_length=100, blank=True,
+                                 help_text='For uncertain dates: "ca. 1815", "before 1820"')
+
+    # Provenance
+    certainty = models.CharField(max_length=20, choices=Certainty.choices,
+                                 default='probable')
+    source = models.TextField(blank=True,
+                              help_text='How we know this: documents, external authority, etc.')
+    notes = models.TextField(blank=True)
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Known Function'
+        verbose_name_plural = 'Known Functions'
+        ordering = ['date_start', 'function']
+
+    def __str__(self):
+        if self.date_start:
+            return f"{self.entity.display_name}: {self.function} ({self.date_start.year})"
+        return f"{self.entity.display_name}: {self.function}"
 
 
 class Place(models.Model):
@@ -339,6 +423,14 @@ class DescriptionEntity(models.Model):
 
     role_note = models.TextField(blank=True)
     sequence = models.PositiveIntegerField(default=0)
+
+    # Documentary styling (evidence layer)
+    honorific = models.CharField(max_length=100, blank=True,
+                                 help_text='Honorific as recorded in this document (Don, Fray)')
+    function = models.CharField(max_length=300, blank=True,
+                                help_text='Function/office as recorded (Gobernador de Popayán)')
+    name_as_recorded = models.CharField(max_length=500, blank=True,
+                                        help_text='Full name string as appears in document')
 
     # Workflow
     needs_review = models.BooleanField(default=False)
