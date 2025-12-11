@@ -1,271 +1,182 @@
 """
-Fisqua Catalog Admin Configuration
+Zasqua Catalog Admin Configuration
 
-Admin interfaces with intelligent tiered field display:
-- ~20 essential fields visible by default
-- Everything else in collapsed sections organized by ISAD(G) area
-- Designed not to overwhelm catalogers
+Admin interfaces for the 6-table schema:
+- Repository, Description, Entity, Place
+- DescriptionEntity, DescriptionPlace (junction tables)
 """
 
-from django import forms
 from django.contrib import admin
 from mptt.admin import MPTTModelAdmin
 
-from .models import Repository, CatalogUnit, Place, CatalogUnitPlace
-from .countries import COUNTRY_CHOICES
-from .departments import COLOMBIA_DEPARTMENTS
+from .models import (
+    Repository, Description, Entity, Place,
+    DescriptionEntity, DescriptionPlace
+)
 
 
-class RepositoryAdminForm(forms.ModelForm):
-    """Custom form with country dropdown and conditional department field."""
-    country_code = forms.ChoiceField(
-        choices=[('', '---------')] + COUNTRY_CHOICES,
-        required=False,
-        initial='COL',
-    )
-
-    class Meta:
-        model = Repository
-        fields = '__all__'
-        widgets = {
-            'region': forms.TextInput(attrs={'class': 'region-text'}),
-        }
-
-    class Media:
-        js = ('admin/js/country_region.js',)
+class DescriptionEntityInline(admin.TabularInline):
+    """Inline for linking entities to descriptions."""
+    model = DescriptionEntity
+    extra = 1
+    autocomplete_fields = ['entity']
 
 
-class CatalogUnitPlaceInline(admin.TabularInline):
-    """Inline for editing place associations on CatalogUnit."""
-    model = CatalogUnitPlace
+class DescriptionPlaceInline(admin.TabularInline):
+    """Inline for linking places to descriptions."""
+    model = DescriptionPlace
     extra = 1
     autocomplete_fields = ['place']
 
 
 @admin.register(Repository)
 class RepositoryAdmin(admin.ModelAdmin):
-    form = RepositoryAdminForm
-    list_display = ['name', 'abbreviation', 'institution_type', 'city',
-                    'country_code', 'enabled']
-    list_filter = ['enabled', 'institution_type', 'country_code']
-    search_fields = ['name', 'abbreviation', 'repository_code', 'city']
+    list_display = ['name', 'code', 'city', 'country_code', 'enabled']
+    list_filter = ['enabled', 'country_code']
+    search_fields = ['name', 'code', 'city']
     ordering = ['name']
 
     fieldsets = (
-        ('Basic Information', {
-            'fields': ('name', 'name_translations', 'abbreviation', 'repository_code')
+        (None, {
+            'fields': ('code', 'name', 'country_code', 'city')
         }),
-        ('Location & Contact', {
-            'fields': ('institution_type', 'country_code', 'region', 'city',
-                       'address', 'website_url', 'contact_email', 'contact_phone')
-        }),
-        ('Settings', {
-            'fields': ('default_metadata_standard', 'default_language')
-        }),
-        ('Administrative', {
-            'fields': ('enabled', 'notes')
+        ('Details', {
+            'classes': ('collapse',),
+            'fields': ('address', 'website', 'notes', 'enabled')
         }),
     )
 
 
-@admin.register(CatalogUnit)
-class CatalogUnitAdmin(MPTTModelAdmin):
+@admin.register(Description)
+class DescriptionAdmin(MPTTModelAdmin):
     """
-    Tiered admin interface for CatalogUnit.
-
-    Design principles:
-    - ~20 most common fields visible by default
-    - Collapsed sections for specialized fields
-    - Organized by ISAD(G) areas
+    Admin for archival descriptions.
+    Essential fields visible, rest collapsed by ISAD(G) area.
     """
 
-    list_display = ['title_short', 'reference_code', 'repository', 'level_type',
+    list_display = ['title_short', 'reference_code', 'repository', 'level',
                     'date_expression', 'is_published']
-    list_filter = ['repository', 'metadata_standard', 'level_type', 'is_published',
-                   'access_conditions', 'resource_type', 'has_digital_files']
-    search_fields = ['title', 'local_identifier', 'description', 'creator_string']
-    autocomplete_fields = ['repository', 'parent', 'created_by', 'updated_by']
-    readonly_fields = ['reference_code']
+    list_filter = ['repository', 'level', 'resource_type', 'is_published',
+                   'needs_review', 'has_digital']
+    search_fields = ['title', 'reference_code', 'local_identifier',
+                     'scope_content', 'creator_display']
+    autocomplete_fields = ['repository', 'parent']
     ordering = ['tree_id', 'lft']
     date_hierarchy = 'date_start'
 
-    inlines = [CatalogUnitPlaceInline]
+    inlines = [DescriptionEntityInline, DescriptionPlaceInline]
 
     fieldsets = (
-        # =====================================================================
-        # ESSENTIAL FIELDS (~20) - Always visible
-        # =====================================================================
-        ('Essential Information', {
-            'description': 'Core fields for every catalog record',
+        # Essential fields - always visible
+        ('Essential', {
             'fields': (
                 'repository',
                 'parent',
-                'level_type',
-                'local_identifier',
-                'reference_code',
+                ('level', 'resource_type'),
+                ('reference_code', 'local_identifier'),
                 'title',
                 'translated_title',
                 ('date_expression', 'date_start', 'date_end'),
-                'extent_expression',
-                'creator_string',
-                'description',
-                'language_codes',
-                ('access_conditions', 'resource_type'),
-                ('is_published', 'has_digital_files'),
+                'extent',
+                'scope_content',
+                'language',
+                ('is_published', 'has_digital'),
             )
         }),
 
-        # =====================================================================
-        # COLLAPSED SECTIONS - Organized by ISAD(G) area
-        # =====================================================================
-
-        # ISAD(G) 3.1 Identity Statement Area (additional fields)
+        # Identity (ISAD 3.1)
         ('Identity Details', {
             'classes': ('collapse',),
-            'description': 'ISAD(G) 3.1 - Additional identity fields',
             'fields': (
-                'metadata_standard',
-                ('neogranadina_pid', 'original_reference'),
                 'uniform_title',
-                ('date_type', 'date_note'),
-                ('date_start_approximation', 'date_end_approximation'),
-                ('extent_quantity', 'extent_unit'),
-                'extent_note',
+                'genre',
+                'date_certainty',
                 ('dimensions', 'medium'),
-                ('duration', 'condition'),
             )
         }),
 
-        # ISAD(G) 3.2 Context Area
+        # Bibliographic (printed materials)
+        ('Bibliographic', {
+            'classes': ('collapse',),
+            'fields': (
+                'imprint',
+                'edition_statement',
+                'series_statement',
+                ('volume_number', 'issue_number'),
+                'pages',
+            )
+        }),
+
+        # Context (ISAD 3.2)
         ('Context', {
             'classes': ('collapse',),
-            'description': 'ISAD(G) 3.2 - Provenance and history',
-            'fields': (
-                'administrative_history',
-                'biographical_history',
-                'archival_history',
-                'acquisition_info',
-            )
+            'fields': ('provenance',)
         }),
 
-        # ISAD(G) 3.3 Content and Structure Area
+        # Content (ISAD 3.3)
         ('Content & Structure', {
             'classes': ('collapse',),
-            'description': 'ISAD(G) 3.3 - Additional content description',
-            'fields': (
-                'description_translations',
-                'appraisal_destruction',
-                'accruals',
-                'system_of_arrangement',
-            )
+            'fields': ('arrangement',)
         }),
 
-        # ISAD(G) 3.4 Access and Use Area
+        # Access (ISAD 3.4)
         ('Access & Rights', {
             'classes': ('collapse',),
-            'description': 'ISAD(G) 3.4 - Conditions of access and use',
             'fields': (
-                'access_restrictions_note',
-                ('access_restriction_type', 'access_restriction_end_date'),
-                ('contains_sensitive_data', 'sensitive_data_nature'),
+                'access_conditions',
                 'reproduction_conditions',
-                ('rights_copyright_status', 'rights_holder_name'),
+                ('rights_status', 'rights_holder'),
                 'rights_statement',
-                ('rights_license', 'rights_note'),
-                'language_note',
-                'physical_characteristics',
-                'technical_requirements',
-                ('finding_aids', 'finding_aid_url'),
             )
         }),
 
-        # ISAD(G) 3.5 Allied Materials Area
-        ('Allied Materials & Physical Location', {
+        # Allied Materials (ISAD 3.5)
+        ('Allied Materials', {
             'classes': ('collapse',),
-            'description': 'ISAD(G) 3.5 - Related materials',
             'fields': (
                 'location_of_originals',
-                'physical_location',
-                'physical_collection',
-                ('physical_box', 'physical_folder'),
-                'physical_location_note',
-                'location_of_copies',
-                'related_units',
-                'publication_note',
+                'related_materials',
             )
         }),
 
-        # ISAD(G) 3.6 & 3.7 Notes and Description Control
-        ('Notes & Description Control', {
+        # Notes (ISAD 3.6)
+        ('Notes', {
             'classes': ('collapse',),
-            'description': 'ISAD(G) 3.6/3.7 - Notes and cataloging info',
             'fields': (
                 'notes',
                 'internal_notes',
-                ('cataloger_name', 'description_status'),
-                'rules_conventions',
-                ('description_date', 'description_revision_date'),
-                'statement_of_responsibility',
             )
         }),
 
-        # Provenance Details (for books, periodicals, photos)
-        ('Provenance Details', {
+        # Denormalized / Display
+        ('Display Fields', {
             'classes': ('collapse',),
-            'description': 'For books, periodicals, photographs, and AV materials',
             'fields': (
-                ('author', 'editor'),
-                'scribe',
-                ('publisher', 'publisher_location'),
-                ('photographer', 'artist'),
-                ('composer', 'director'),
-                ('volume_number', 'issue_number', 'page_number'),
-            )
-        }),
-
-        # Subjects & Keywords
-        ('Subjects & Keywords', {
-            'classes': ('collapse',),
-            'description': 'Subject access points',
-            'fields': (
-                'subjects_topic',
-                'subjects_geographic',
-                'subjects_temporal',
-                'subjects_name_string',
+                'creator_display',
+                'place_display',
+                'path_cache',
             )
         }),
 
         # Digital
-        ('Digital Files & Links', {
+        ('Digital', {
             'classes': ('collapse',),
-            'description': 'Digital attachments and IIIF',
+            'fields': ('iiif_manifest_url',)
+        }),
+
+        # Workflow
+        ('Workflow', {
+            'classes': ('collapse',),
             'fields': (
-                ('external_url', 'external_url_label'),
-                ('iiif_manifest_url', 'iiif_manifest_version'),
-                ('digital_folder_name', 'digital_file_count'),
-                ('digital_file_format', 'digitization_date'),
-                'digitization_notes',
-                'has_external_link',
+                ('needs_review', 'review_note'),
             )
         }),
 
-        # Display & Sorting
-        ('Display & Sorting', {
+        # Provenance (CA migration)
+        ('CA Migration', {
             'classes': ('collapse',),
-            'description': 'Control display order and visibility',
             'fields': (
-                ('sequence_number', 'sort_key'),
-                'descendant_count',
-                ('publication_date', 'featured'),
-            )
-        }),
-
-        # Metadata (who created/updated)
-        ('Record Metadata', {
-            'classes': ('collapse',),
-            'description': 'Record creation and modification info',
-            'fields': (
-                ('created_by', 'updated_by'),
+                ('ca_object_id', 'ca_collection_id'),
             )
         }),
     )
@@ -276,41 +187,120 @@ class CatalogUnitAdmin(MPTTModelAdmin):
     title_short.short_description = 'Title'
 
 
-@admin.register(Place)
-class PlaceAdmin(admin.ModelAdmin):
-    list_display = ['label', 'historical_name', 'place_type', 'latitude',
-                    'longitude', 'historical_admin_1', 'is_active']
-    list_filter = ['place_type', 'is_active', 'country_code', 'historical_region',
-                   'historical_admin_1']
-    search_fields = ['label', 'historical_name', 'gazetteer_id']
-    ordering = ['label']
+@admin.register(Entity)
+class EntityAdmin(admin.ModelAdmin):
+    list_display = ['display_name', 'entity_type', 'dates_of_existence',
+                    'needs_review']
+    list_filter = ['entity_type', 'needs_review']
+    search_fields = ['display_name', 'sort_name', 'name_variants']
+    ordering = ['sort_name']
 
     fieldsets = (
-        ('Identification', {
-            'fields': ('gazetteer_id', 'gazetteer_source', 'label', 'historical_name',
-                       'place_type')
+        (None, {
+            'fields': (
+                ('display_name', 'sort_name'),
+                'entity_type',
+                'name_variants',
+            )
         }),
-        ('Geocoding', {
-            'fields': ('latitude', 'longitude', 'coordinate_precision',
-                       'coordinate_source')
+        ('Dates & History', {
+            'classes': ('collapse',),
+            'fields': (
+                'dates_of_existence',
+                ('date_start', 'date_end'),
+                'history',
+            )
         }),
-        ('Modern Administrative', {
-            'fields': ('country_code', 'admin_level_1', 'admin_level_2',
-                       'admin_level_3')
+        ('Corporate Bodies', {
+            'classes': ('collapse',),
+            'fields': ('legal_status', 'functions')
         }),
-        ('Historical Administrative (Colonial)', {
-            'fields': ('historical_admin_1', 'historical_admin_2', 'historical_region')
+        ('Control', {
+            'classes': ('collapse',),
+            'fields': ('sources',)
         }),
-        ('Hierarchy & Metadata', {
-            'fields': ('parent_place', 'notes', 'is_active')
+        ('Workflow', {
+            'classes': ('collapse',),
+            'fields': (
+                ('needs_review', 'review_note'),
+                'merged_into',
+            )
+        }),
+        ('CA Migration', {
+            'classes': ('collapse',),
+            'fields': ('ca_entity_id',)
         }),
     )
 
 
-@admin.register(CatalogUnitPlace)
-class CatalogUnitPlaceAdmin(admin.ModelAdmin):
-    list_display = ['catalog_unit', 'place', 'place_role', 'sequence_number']
-    list_filter = ['place_role']
-    search_fields = ['catalog_unit__title', 'place__label']
-    autocomplete_fields = ['catalog_unit', 'place']
-    ordering = ['catalog_unit', 'sequence_number']
+@admin.register(Place)
+class PlaceAdmin(admin.ModelAdmin):
+    list_display = ['label', 'display_name', 'place_type', 'latitude',
+                    'longitude', 'needs_geocoding', 'needs_review']
+    list_filter = ['place_type', 'needs_geocoding', 'needs_review',
+                   'country_code', 'colonial_gobernacion']
+    search_fields = ['label', 'display_name', 'name_variants']
+    ordering = ['label']
+
+    fieldsets = (
+        (None, {
+            'fields': (
+                ('label', 'display_name'),
+                'place_type',
+                'name_variants',
+                'parent',
+            )
+        }),
+        ('Geography', {
+            'fields': (
+                ('latitude', 'longitude'),
+                'coordinate_precision',
+            )
+        }),
+        ('Colonial Context', {
+            'classes': ('collapse',),
+            'fields': (
+                'colonial_gobernacion',
+                'colonial_partido',
+                'colonial_region',
+            )
+        }),
+        ('Modern Context', {
+            'classes': ('collapse',),
+            'fields': (
+                'country_code',
+                'admin_level_1',
+                'admin_level_2',
+            )
+        }),
+        ('Workflow', {
+            'classes': ('collapse',),
+            'fields': (
+                ('needs_geocoding', 'needs_review'),
+                'review_note',
+                'merged_into',
+            )
+        }),
+        ('CA Migration', {
+            'classes': ('collapse',),
+            'fields': ('ca_place_ids',)
+        }),
+    )
+
+
+@admin.register(DescriptionEntity)
+class DescriptionEntityAdmin(admin.ModelAdmin):
+    list_display = ['description', 'entity', 'role', 'sequence', 'needs_review']
+    list_filter = ['role', 'needs_review']
+    search_fields = ['description__title', 'entity__display_name']
+    autocomplete_fields = ['description', 'entity']
+    ordering = ['description', 'sequence']
+
+
+@admin.register(DescriptionPlace)
+class DescriptionPlaceAdmin(admin.ModelAdmin):
+    list_display = ['description', 'place', 'role', 'needs_review']
+    list_filter = ['role', 'needs_review']
+    search_fields = ['description__title', 'place__label']
+    autocomplete_fields = ['description', 'place']
+    ordering = ['description']

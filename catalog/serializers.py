@@ -1,43 +1,53 @@
 """
-REST API Serializers for Fisqua Catalog.
+REST API Serializers for Zasqua Catalog.
 """
 
 from rest_framework import serializers
-from .models import Repository, CatalogUnit, Place, CatalogUnitPlace
+from .models import (
+    Repository, Description, Entity, Place,
+    DescriptionEntity, DescriptionPlace
+)
 
 
 class RepositoryListSerializer(serializers.ModelSerializer):
     """Compact serializer for repository listings."""
-    catalog_unit_count = serializers.SerializerMethodField()
+    description_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Repository
-        fields = [
-            'id', 'name', 'abbreviation', 'repository_code',
-            'institution_type', 'city', 'region', 'country_code',
-            'catalog_unit_count'
-        ]
+        fields = ['id', 'code', 'name', 'city', 'country_code', 'description_count']
 
-    def get_catalog_unit_count(self, obj):
-        return obj.catalog_units.count()
+    def get_description_count(self, obj):
+        return obj.descriptions.count()
 
 
 class RepositoryDetailSerializer(serializers.ModelSerializer):
     """Full serializer for repository detail view."""
-    catalog_unit_count = serializers.SerializerMethodField()
-    root_units = serializers.SerializerMethodField()
+    description_count = serializers.SerializerMethodField()
+    root_descriptions = serializers.SerializerMethodField()
 
     class Meta:
         model = Repository
         fields = '__all__'
 
-    def get_catalog_unit_count(self, obj):
-        return obj.catalog_units.count()
+    def get_description_count(self, obj):
+        return obj.descriptions.count()
 
-    def get_root_units(self, obj):
-        """Return top-level catalog units for this repository."""
-        roots = obj.catalog_units.filter(parent__isnull=True)[:20]
-        return CatalogUnitListSerializer(roots, many=True).data
+    def get_root_descriptions(self, obj):
+        """Return top-level descriptions for this repository."""
+        roots = obj.descriptions.filter(parent__isnull=True)[:20]
+        return DescriptionListSerializer(roots, many=True).data
+
+
+class EntitySerializer(serializers.ModelSerializer):
+    """Serializer for Entity model."""
+
+    class Meta:
+        model = Entity
+        fields = [
+            'id', 'display_name', 'sort_name', 'entity_type',
+            'dates_of_existence', 'history'
+        ]
 
 
 class PlaceSerializer(serializers.ModelSerializer):
@@ -46,35 +56,43 @@ class PlaceSerializer(serializers.ModelSerializer):
     class Meta:
         model = Place
         fields = [
-            'id', 'label', 'historical_name', 'place_type',
+            'id', 'label', 'display_name', 'place_type',
             'latitude', 'longitude', 'country_code',
-            'admin_level_1', 'admin_level_2', 'admin_level_3',
-            'historical_admin_1', 'historical_admin_2', 'historical_region'
+            'admin_level_1', 'admin_level_2',
+            'colonial_gobernacion', 'colonial_partido', 'colonial_region'
         ]
 
 
-class CatalogUnitPlaceSerializer(serializers.ModelSerializer):
+class DescriptionEntitySerializer(serializers.ModelSerializer):
+    """Serializer for entity links."""
+    entity = EntitySerializer(read_only=True)
+
+    class Meta:
+        model = DescriptionEntity
+        fields = ['entity', 'role', 'role_note', 'sequence']
+
+
+class DescriptionPlaceSerializer(serializers.ModelSerializer):
     """Serializer for place links."""
     place = PlaceSerializer(read_only=True)
 
     class Meta:
-        model = CatalogUnitPlace
-        fields = ['place', 'place_role', 'role_note']
+        model = DescriptionPlace
+        fields = ['place', 'role', 'role_note']
 
 
-class CatalogUnitListSerializer(serializers.ModelSerializer):
-    """Compact serializer for catalog unit listings."""
-    repository_name = serializers.CharField(source='repository.abbreviation', read_only=True)
-    reference_code = serializers.ReadOnlyField()
+class DescriptionListSerializer(serializers.ModelSerializer):
+    """Compact serializer for description listings."""
+    repository_code = serializers.CharField(source='repository.code', read_only=True)
     has_children = serializers.SerializerMethodField()
     child_count = serializers.SerializerMethodField()
 
     class Meta:
-        model = CatalogUnit
+        model = Description
         fields = [
-            'id', 'repository_name', 'reference_code', 'local_identifier',
-            'title', 'level_type', 'date_expression',
-            'has_children', 'child_count', 'has_digital_files'
+            'id', 'repository_code', 'reference_code', 'local_identifier',
+            'title', 'level', 'date_expression',
+            'has_children', 'child_count', 'has_digital'
         ]
 
     def get_has_children(self, obj):
@@ -84,16 +102,16 @@ class CatalogUnitListSerializer(serializers.ModelSerializer):
         return obj.get_children().count()
 
 
-class CatalogUnitDetailSerializer(serializers.ModelSerializer):
-    """Full serializer for catalog unit detail view."""
+class DescriptionDetailSerializer(serializers.ModelSerializer):
+    """Full serializer for description detail view."""
     repository = RepositoryListSerializer(read_only=True)
-    reference_code = serializers.ReadOnlyField()
     breadcrumb = serializers.SerializerMethodField()
     children = serializers.SerializerMethodField()
+    entities = serializers.SerializerMethodField()
     places = serializers.SerializerMethodField()
 
     class Meta:
-        model = CatalogUnit
+        model = Description
         fields = '__all__'
 
     def get_breadcrumb(self, obj):
@@ -103,7 +121,7 @@ class CatalogUnitDetailSerializer(serializers.ModelSerializer):
             {
                 'id': a.id,
                 'title': a.title[:80] + '...' if len(a.title) > 80 else a.title,
-                'level_type': a.level_type
+                'level': a.level
             }
             for a in ancestors
         ]
@@ -111,22 +129,26 @@ class CatalogUnitDetailSerializer(serializers.ModelSerializer):
     def get_children(self, obj):
         """Return direct children."""
         children = obj.get_children()[:50]
-        return CatalogUnitListSerializer(children, many=True).data
+        return DescriptionListSerializer(children, many=True).data
+
+    def get_entities(self, obj):
+        """Return linked entities."""
+        links = obj.entity_links.select_related('entity').all()
+        return DescriptionEntitySerializer(links, many=True).data
 
     def get_places(self, obj):
         """Return linked places."""
         links = obj.place_links.select_related('place').all()
-        return CatalogUnitPlaceSerializer(links, many=True).data
+        return DescriptionPlaceSerializer(links, many=True).data
 
 
-class CatalogUnitTreeSerializer(serializers.ModelSerializer):
+class DescriptionTreeSerializer(serializers.ModelSerializer):
     """Serializer for tree/hierarchy view."""
     children = serializers.SerializerMethodField()
-    reference_code = serializers.ReadOnlyField()
 
     class Meta:
-        model = CatalogUnit
-        fields = ['id', 'title', 'reference_code', 'level_type', 'children']
+        model = Description
+        fields = ['id', 'title', 'reference_code', 'level', 'children']
 
     def get_children(self, obj):
         """Recursively serialize children (with depth limit)."""
@@ -134,7 +156,7 @@ class CatalogUnitTreeSerializer(serializers.ModelSerializer):
         if depth <= 0:
             return []
         children = obj.get_children()
-        return CatalogUnitTreeSerializer(
+        return DescriptionTreeSerializer(
             children, many=True,
             context={'depth': depth - 1}
         ).data
@@ -142,24 +164,23 @@ class CatalogUnitTreeSerializer(serializers.ModelSerializer):
 
 class SearchResultSerializer(serializers.ModelSerializer):
     """Serializer for search results."""
-    repository_name = serializers.CharField(source='repository.abbreviation', read_only=True)
-    reference_code = serializers.ReadOnlyField()
+    repository_code = serializers.CharField(source='repository.code', read_only=True)
     breadcrumb_text = serializers.SerializerMethodField()
 
     class Meta:
-        model = CatalogUnit
+        model = Description
         fields = [
-            'id', 'repository_name', 'reference_code', 'local_identifier',
-            'title', 'level_type', 'date_expression', 'description',
-            'breadcrumb_text'
+            'id', 'repository_code', 'reference_code', 'local_identifier',
+            'title', 'level', 'date_expression', 'scope_content',
+            'creator_display', 'breadcrumb_text'
         ]
 
     def get_breadcrumb_text(self, obj):
         """Return breadcrumb as text string."""
         ancestors = obj.get_ancestors(include_self=False)
         if not ancestors:
-            return obj.repository.abbreviation or obj.repository.name
-        parts = [obj.repository.abbreviation or obj.repository.name]
+            return obj.repository.code
+        parts = [obj.repository.code]
         for a in ancestors[:3]:
             parts.append(a.title[:30])
         return ' > '.join(parts)

@@ -1,5 +1,5 @@
 """
-REST API Views for Fisqua Catalog.
+REST API Views for Zasqua Catalog.
 """
 
 from django.db.models import Q
@@ -7,11 +7,12 @@ from rest_framework import viewsets, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import Repository, CatalogUnit, Place
+from .models import Repository, Description, Entity, Place
 from .serializers import (
     RepositoryListSerializer, RepositoryDetailSerializer,
-    CatalogUnitListSerializer, CatalogUnitDetailSerializer,
-    CatalogUnitTreeSerializer, PlaceSerializer, SearchResultSerializer
+    DescriptionListSerializer, DescriptionDetailSerializer,
+    DescriptionTreeSerializer, EntitySerializer, PlaceSerializer,
+    SearchResultSerializer
 )
 
 
@@ -20,11 +21,11 @@ class RepositoryViewSet(viewsets.ReadOnlyModelViewSet):
     API endpoint for repositories.
 
     list: Get all repositories
-    retrieve: Get a single repository with its root catalog units
+    retrieve: Get a single repository with its root descriptions
     """
     queryset = Repository.objects.filter(enabled=True).order_by('name')
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['name', 'abbreviation', 'city', 'region']
+    search_fields = ['name', 'code', 'city']
     ordering_fields = ['name', 'created_at']
 
     def get_serializer_class(self):
@@ -33,28 +34,28 @@ class RepositoryViewSet(viewsets.ReadOnlyModelViewSet):
         return RepositoryListSerializer
 
 
-class CatalogUnitViewSet(viewsets.ReadOnlyModelViewSet):
+class DescriptionViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    API endpoint for catalog units.
+    API endpoint for archival descriptions.
 
-    list: Get catalog units (filterable by repository, level, etc.)
-    retrieve: Get a single catalog unit with its children and places
+    list: Get descriptions (filterable by repository, level, etc.)
+    retrieve: Get a single description with its children and linked entities/places
     tree: Get hierarchical tree structure
-    search: Full-text search across catalog units
+    search: Full-text search across descriptions
     """
-    queryset = CatalogUnit.objects.select_related('repository').order_by('tree_id', 'lft')
+    queryset = Description.objects.select_related('repository').order_by('tree_id', 'lft')
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['title', 'description', 'local_identifier', 'creator_string']
+    search_fields = ['title', 'scope_content', 'local_identifier', 'creator_display']
     ordering_fields = ['title', 'date_start', 'created_at']
 
     def get_serializer_class(self):
         if self.action == 'retrieve':
-            return CatalogUnitDetailSerializer
+            return DescriptionDetailSerializer
         if self.action == 'tree':
-            return CatalogUnitTreeSerializer
+            return DescriptionTreeSerializer
         if self.action == 'search':
             return SearchResultSerializer
-        return CatalogUnitListSerializer
+        return DescriptionListSerializer
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -64,10 +65,10 @@ class CatalogUnitViewSet(viewsets.ReadOnlyModelViewSet):
         if repository_id:
             queryset = queryset.filter(repository_id=repository_id)
 
-        # Filter by level type
-        level_type = self.request.query_params.get('level_type')
-        if level_type:
-            queryset = queryset.filter(level_type=level_type)
+        # Filter by level
+        level = self.request.query_params.get('level')
+        if level:
+            queryset = queryset.filter(level=level)
 
         # Filter by parent (for browsing hierarchy)
         parent_id = self.request.query_params.get('parent')
@@ -87,12 +88,12 @@ class CatalogUnitViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'])
     def search(self, request):
         """
-        Full-text search across catalog units.
+        Full-text search across descriptions.
 
         Query params:
             q: Search query
             repository: Filter by repository ID
-            level_type: Filter by level type
+            level: Filter by level
             date_from: Filter by date range start (YYYY)
             date_to: Filter by date range end (YYYY)
         """
@@ -105,10 +106,9 @@ class CatalogUnitViewSet(viewsets.ReadOnlyModelViewSet):
         # Basic text search
         queryset = queryset.filter(
             Q(title__icontains=query) |
-            Q(description__icontains=query) |
+            Q(scope_content__icontains=query) |
             Q(local_identifier__icontains=query) |
-            Q(creator_string__icontains=query) |
-            Q(subjects_topic__contains=[query])
+            Q(creator_display__icontains=query)
         )
 
         # Date range filters
@@ -143,34 +143,69 @@ class CatalogUnitViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=True, methods=['get'])
     def tree(self, request, pk=None):
         """
-        Get hierarchical tree starting from this unit.
+        Get hierarchical tree starting from this description.
 
         Query params:
             depth: How many levels to include (default 2, max 5)
         """
-        unit = self.get_object()
+        description = self.get_object()
         depth = min(int(request.query_params.get('depth', 2)), 5)
-        serializer = CatalogUnitTreeSerializer(unit, context={'depth': depth})
+        serializer = DescriptionTreeSerializer(description, context={'depth': depth})
         return Response(serializer.data)
 
     @action(detail=True, methods=['get'])
     def children(self, request, pk=None):
-        """Get direct children of this unit."""
-        unit = self.get_object()
-        children = unit.get_children()
+        """Get direct children of this description."""
+        description = self.get_object()
+        children = description.get_children()
         page = self.paginate_queryset(children)
         if page is not None:
-            serializer = CatalogUnitListSerializer(page, many=True)
+            serializer = DescriptionListSerializer(page, many=True)
             return self.get_paginated_response(serializer.data)
-        serializer = CatalogUnitListSerializer(children, many=True)
+        serializer = DescriptionListSerializer(children, many=True)
         return Response(serializer.data)
 
     @action(detail=True, methods=['get'])
     def ancestors(self, request, pk=None):
-        """Get all ancestors (breadcrumb) of this unit."""
-        unit = self.get_object()
-        ancestors = unit.get_ancestors(include_self=False)
-        serializer = CatalogUnitListSerializer(ancestors, many=True)
+        """Get all ancestors (breadcrumb) of this description."""
+        description = self.get_object()
+        ancestors = description.get_ancestors(include_self=False)
+        serializer = DescriptionListSerializer(ancestors, many=True)
+        return Response(serializer.data)
+
+
+class EntityViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    API endpoint for entities (persons, organizations).
+
+    list: Get all entities
+    retrieve: Get a single entity with linked descriptions
+    """
+    queryset = Entity.objects.filter(merged_into__isnull=True).order_by('sort_name')
+    serializer_class = EntitySerializer
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['display_name', 'sort_name']
+    ordering_fields = ['sort_name', 'created_at']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+
+        # Filter by entity type
+        entity_type = self.request.query_params.get('type')
+        if entity_type:
+            queryset = queryset.filter(entity_type=entity_type)
+
+        return queryset
+
+    @action(detail=True, methods=['get'])
+    def descriptions(self, request, pk=None):
+        """Get descriptions linked to this entity."""
+        entity = self.get_object()
+        links = entity.description_links.select_related(
+            'description', 'description__repository'
+        )
+        descriptions = [link.description for link in links]
+        serializer = DescriptionListSerializer(descriptions, many=True)
         return Response(serializer.data)
 
 
@@ -179,19 +214,36 @@ class PlaceViewSet(viewsets.ReadOnlyModelViewSet):
     API endpoint for places (gazetteer).
 
     list: Get all places
-    retrieve: Get a single place with linked catalog units
+    retrieve: Get a single place with linked descriptions
     """
-    queryset = Place.objects.filter(is_active=True).order_by('label')
+    queryset = Place.objects.filter(merged_into__isnull=True).order_by('label')
     serializer_class = PlaceSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['label', 'historical_name']
+    search_fields = ['label', 'display_name']
     ordering_fields = ['label', 'created_at']
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+
+        # Filter by place type
+        place_type = self.request.query_params.get('type')
+        if place_type:
+            queryset = queryset.filter(place_type=place_type)
+
+        # Filter to geocoded only
+        geocoded = self.request.query_params.get('geocoded')
+        if geocoded and geocoded.lower() in ('true', '1', 'yes'):
+            queryset = queryset.filter(latitude__isnull=False, longitude__isnull=False)
+
+        return queryset
+
     @action(detail=True, methods=['get'])
-    def catalog_units(self, request, pk=None):
-        """Get catalog units linked to this place."""
+    def descriptions(self, request, pk=None):
+        """Get descriptions linked to this place."""
         place = self.get_object()
-        links = place.catalog_unit_links.select_related('catalog_unit', 'catalog_unit__repository')
-        units = [link.catalog_unit for link in links]
-        serializer = CatalogUnitListSerializer(units, many=True)
+        links = place.description_links.select_related(
+            'description', 'description__repository'
+        )
+        descriptions = [link.description for link in links]
+        serializer = DescriptionListSerializer(descriptions, many=True)
         return Response(serializer.data)

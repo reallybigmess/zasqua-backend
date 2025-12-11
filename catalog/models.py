@@ -1,95 +1,37 @@
 """
-Fisqua Catalog Models
+Zasqua Catalog Models
 
-Core data models implementing the Fisqua database schema v0.1:
-- Repository: Top-level institutions/archives
-- CatalogUnit: Universal archival descriptions (ISAD(G)/MEAP compliant)
-- Place: Geocoded geographic entities
-- CatalogUnitPlace: Links catalog units to places
-
-Streamlined from ~95 to ~70 fields by removing EAP script/calendar
-extensions and consolidating duplicate fields.
+6-table schema optimized for CA migration:
+- Repository: Archival institutions
+- Description: Unified hierarchy (MPTT) for collections + items
+- Entity: Authority records for persons/organizations
+- Place: Geographic authority with coordinates
+- DescriptionEntity: Junction with typed roles
+- DescriptionPlace: Junction with typed roles
 """
 
 from django.db import models
 from django.contrib.auth.models import User
-from django.core.validators import MinValueValidator, MaxValueValidator
 from mptt.models import MPTTModel, TreeForeignKey
 
 
 class Repository(models.Model):
     """
-    Top-level institutions that own collections.
+    An archival institution holding materials.
+    Maps to CA 'institucion' type collections.
     """
+    code = models.CharField(max_length=20, unique=True)
+    name = models.CharField(max_length=255)
+    country_code = models.CharField(max_length=3, default='COL')
+    city = models.CharField(max_length=100, blank=True)
 
-    class MetadataStandard(models.TextChoices):
-        MEAP = 'MEAP', 'MEAP'
-        EAP = 'EAP', 'EAP'
-        ISADG = 'ISADG', 'ISAD(G)'
-
-    class InstitutionType(models.TextChoices):
-        # Government/Public
-        NATIONAL_ARCHIVE = 'national_archive', 'Archivo nacional'
-        REGIONAL_ARCHIVE = 'regional_archive', 'Archivo regional'
-        MUNICIPAL_ARCHIVE = 'municipal_archive', 'Archivo municipal'
-        JUDICIAL_ARCHIVE = 'judicial_archive', 'Archivo judicial'
-        # Ecclesiastical
-        PARISH_ARCHIVE = 'parish_archive', 'Archivo parroquial'
-        DIOCESAN_ARCHIVE = 'diocesan_archive', 'Archivo diocesano'
-        CATHEDRAL_CHAPTER = 'cathedral_chapter', 'Cabildo catedralicio'
-        CONVENT = 'convent', 'Convento/Monasterio'
-        # Notarial
-        NOTARY = 'notary', 'Notaría'
-        # Academic/Cultural
-        UNIVERSITY = 'university', 'Universidad'
-        LIBRARY = 'library', 'Biblioteca'
-        MUSEUM = 'museum', 'Museo'
-        RESEARCH_CENTER = 'research_center', 'Centro de investigación'
-        # Non-institutional
-        PRIVATE_COLLECTION = 'private_collection', 'Colección privada'
-        FAMILY_ARCHIVE = 'family_archive', 'Archivo familiar'
-        COMMUNITY_ARCHIVE = 'community_archive', 'Archivo comunitario'
-        COLLECTIVE = 'collective', 'Colectivo'
-        # Catch-all
-        OTHER = 'other', 'Otro'
-
-    class LanguageCode(models.TextChoices):
-        ES = 'es', 'Español'
-        EN = 'en', 'English'
-        PT = 'pt', 'Português'
-
-    # Basic Information
-    name = models.CharField(max_length=500)
-    name_translations = models.JSONField(blank=True, null=True,
-        help_text='Translations: {"es": "Nombre", "en": "Name"}')
-    abbreviation = models.CharField(max_length=50, blank=True)
-    repository_code = models.CharField(max_length=50, unique=True, blank=True, null=True,
-        help_text='ISO 15511 code if available')
-
-    # Contact & Location
-    institution_type = models.CharField(max_length=100, choices=InstitutionType.choices,
-        blank=True)
-    country_code = models.CharField(max_length=3, default='COL',
-        help_text='Código ISO 3166-1 alpha-3')
-    city = models.CharField(max_length=255, blank=True)
-    region = models.CharField(max_length=255, blank=True,
-        help_text='Department, state, or province')
+    # Optional
     address = models.TextField(blank=True)
-    website_url = models.URLField(blank=True)
-    contact_email = models.EmailField(blank=True)
-    contact_phone = models.CharField(max_length=50, blank=True)
-
-    # Settings
-    default_metadata_standard = models.CharField(max_length=20,
-        choices=MetadataStandard.choices, default=MetadataStandard.MEAP,
-        help_text='Estándar predeterminado para nuevos registros')
-    default_language = models.CharField(max_length=10, choices=LanguageCode.choices,
-        default=LanguageCode.ES, help_text='Idioma principal de los registros')
+    website = models.URLField(blank=True)
+    notes = models.TextField(blank=True)
 
     # Administrative
-    enabled = models.BooleanField(default=True,
-        help_text='Uncheck to hide this repository from public view without deleting it')
-    notes = models.TextField(blank=True)
+    enabled = models.BooleanField(default=True)
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
@@ -100,396 +42,258 @@ class Repository(models.Model):
         ordering = ['name']
 
     def __str__(self):
-        if self.abbreviation:
-            return f"{self.name} ({self.abbreviation})"
-        return self.name
+        return f"{self.name} ({self.code})"
 
 
-class CatalogUnit(MPTTModel):
+class Description(MPTTModel):
     """
-    Universal table for ALL archival descriptions.
+    A unit of archival description at any level.
 
-    Supports ISAD(G), MEAP, and custom structures.
-    Uses MPTT for efficient hierarchical queries.
-    Catalog-first model: Digital files are optional attachments.
-
-    ~70 fields organized by ISAD(G) areas.
+    Combines CA's collections + objects into a single ISAD(G)-compliant
+    hierarchy. Everything from fonds to individual items lives here.
+    Items CAN have children (enables splitting workflow).
     """
 
-    class MetadataStandard(models.TextChoices):
-        MEAP = 'MEAP', 'MEAP'
-        EAP = 'EAP', 'EAP'
-        ISADG = 'ISADG', 'ISAD(G)'
+    class Level(models.TextChoices):
+        FONDS = 'fonds', 'Fondo'
+        SUBFONDS = 'subfonds', 'Subfondo'
+        SERIES = 'series', 'Serie'
+        SUBSERIES = 'subseries', 'Subserie'
+        FILE = 'file', 'Expediente'
+        ITEM = 'item', 'Unidad documental'
+        # Flexible
+        COLLECTION = 'collection', 'Coleccion'
+        SECTION = 'section', 'Seccion'
+        VOLUME = 'volume', 'Tomo'
 
-    class LevelType(models.TextChoices):
-        # ISAD(G) levels
-        FONDS = 'fonds', 'Fondo / Fonds'
-        SUBFONDS = 'subfonds', 'Subfondo / Sub-fonds'
-        SERIES = 'series', 'Serie / Series'
-        SUBSERIES = 'subseries', 'Subserie / Sub-series'
-        FILE = 'file', 'Expediente / File'
-        ITEM = 'item', 'Unidad documental / Item'
-        # MEAP levels
-        COLLECTION = 'collection', 'Colección / Collection'
-        # Additional useful levels
-        SECTION = 'section', 'Sección / Section'
-        VOLUME = 'volume', 'Volumen / Volume'
-        PIECE = 'piece', 'Pieza / Piece'
+    class ResourceType(models.TextChoices):
+        TEXT = 'text', 'Text'
+        STILL_IMAGE = 'still_image', 'Still Image'
+        CARTOGRAPHIC = 'cartographic', 'Cartographic'
+        MIXED = 'mixed', 'Mixed Materials'
 
-    class AccessCondition(models.TextChoices):
-        OPEN = 'open', 'Abierto / Open'
-        RESTRICTED = 'restricted', 'Restringido / Restricted'
-        CLOSED = 'closed', 'Cerrado / Closed'
+    # --- Hierarchy ---
+    repository = models.ForeignKey(Repository, on_delete=models.PROTECT,
+                                   related_name='descriptions')
+    parent = TreeForeignKey('self', on_delete=models.CASCADE,
+                            null=True, blank=True, related_name='children')
 
-    class DescriptionStatus(models.TextChoices):
-        DRAFT = 'draft', 'Borrador / Draft'
-        IN_PROGRESS = 'in_progress', 'En proceso / In Progress'
-        FINAL = 'final', 'Final'
-        REVISED = 'revised', 'Revisado / Revised'
+    # --- Classification ---
+    level = models.CharField(max_length=20, choices=Level.choices)
+    resource_type = models.CharField(max_length=20, choices=ResourceType.choices,
+                                     blank=True)
+    genre = models.JSONField(default=list, blank=True)  # Getty AAT terms
 
-    # =========================================================================
-    # CORE IDENTITY & HIERARCHY
-    # =========================================================================
+    # --- Identity (ISAD 3.1) ---
+    reference_code = models.CharField(max_length=100, unique=True, db_index=True)
+    local_identifier = models.CharField(max_length=100, db_index=True)
+    title = models.CharField(max_length=2000)
+    translated_title = models.CharField(max_length=2000, blank=True)
+    uniform_title = models.CharField(max_length=500, blank=True)
 
-    repository = models.ForeignKey(Repository, on_delete=models.CASCADE,
-        related_name='catalog_units')
-    parent = TreeForeignKey('self', on_delete=models.CASCADE, null=True, blank=True,
-        related_name='children')
-
-    metadata_standard = models.CharField(max_length=20,
-        choices=MetadataStandard.choices, default=MetadataStandard.MEAP)
-
-    # Level type
-    level_type = models.CharField(max_length=100, choices=LevelType.choices,
-        blank=True, help_text='Archival hierarchy level')
-
-    # Reference Codes & Identifiers
-    local_identifier = models.CharField(max_length=255, blank=True,
-        help_text='Internal repository identifier')
-    neogranadina_pid = models.CharField(max_length=255, unique=True, blank=True, null=True,
-        help_text='Neogranadina persistent identifier')
-    original_reference = models.CharField(max_length=500, blank=True,
-        help_text='Pre-existing shelfmarks or signatures')
-
-    # =========================================================================
-    # ISAD(G) 3.1 IDENTITY STATEMENT AREA
-    # =========================================================================
-
-    # Title
-    title = models.TextField()
-    translated_title = models.TextField(blank=True,
-        help_text='Title translation (usually English)')
-    uniform_title = models.CharField(max_length=500, blank=True,
-        help_text='For periodicals: standardized title')
-
-    # Dates
-    date_expression = models.CharField(max_length=500, blank=True,
-        help_text='Human-readable date (any format/language)')
-    date_type = models.CharField(max_length=50, blank=True,
-        help_text='creation | accumulation | publication | other')
+    # --- Dates ---
+    date_expression = models.CharField(max_length=255, blank=True)
     date_start = models.DateField(null=True, blank=True)
     date_end = models.DateField(null=True, blank=True)
-    date_start_approximation = models.CharField(max_length=20, blank=True,
-        help_text='circa | before | after | unknown')
-    date_end_approximation = models.CharField(max_length=20, blank=True)
-    date_note = models.TextField(blank=True,
-        help_text='Additional date info, bulk dates, etc.')
+    date_certainty = models.CharField(max_length=20, blank=True)
 
-    # Extent and Medium
-    extent_expression = models.CharField(max_length=500, blank=True,
-        help_text='Human-readable: "103.5 cubic feet (98 boxes)"')
-    extent_quantity = models.DecimalField(max_digits=10, decimal_places=2,
-        null=True, blank=True)
-    extent_unit = models.CharField(max_length=100, blank=True,
-        help_text='cubic_feet | linear_meters | items | pages | files')
-    extent_note = models.TextField(blank=True)
+    # --- Physical Description ---
+    extent = models.CharField(max_length=500, blank=True)
+    dimensions = models.CharField(max_length=100, blank=True)
+    medium = models.CharField(max_length=255, blank=True)
 
-    # Physical characteristics
-    dimensions = models.CharField(max_length=255, blank=True)
-    medium = models.CharField(max_length=255, blank=True,
-        help_text='cassette | film | paper | photograph | etc.')
-    duration = models.CharField(max_length=50, blank=True,
-        help_text='For audio/video: HH:MM:SS')
-    condition = models.TextField(blank=True)
-
-    # =========================================================================
-    # ISAD(G) 3.2 CONTEXT AREA
-    # =========================================================================
-
-    creator_string = models.TextField(blank=True,
-        help_text='Creator name(s) as text')
-    administrative_history = models.TextField(blank=True,
-        help_text='For organizations/institutions')
-    biographical_history = models.TextField(blank=True,
-        help_text='For persons/families')
-    archival_history = models.TextField(blank=True,
-        help_text='Custodial history, transfers, provenance')
-    acquisition_info = models.TextField(blank=True,
-        help_text='Source, date, and method of acquisition')
-
-    # =========================================================================
-    # ISAD(G) 3.3 CONTENT AND STRUCTURE AREA
-    # =========================================================================
-
-    description = models.TextField(blank=True,
-        help_text='Scope and content - main description')
-    description_translations = models.JSONField(blank=True, null=True,
-        help_text='{"es": "Descripción en español"}')
-
-    resource_type = models.CharField(max_length=100, blank=True,
-        help_text='still_image | text | sound | moving_image | etc.')
-
-    appraisal_destruction = models.TextField(blank=True)
-    accruals = models.TextField(blank=True)
-    system_of_arrangement = models.TextField(blank=True)
-
-    # =========================================================================
-    # ISAD(G) 3.4 CONDITIONS OF ACCESS AND USE AREA
-    # =========================================================================
-
-    access_conditions = models.CharField(max_length=100,
-        choices=AccessCondition.choices, blank=True)
-    access_restrictions_note = models.TextField(blank=True)
-    access_restriction_type = models.CharField(max_length=100, blank=True,
-        help_text='legal | privacy | preservation | donor')
-    access_restriction_end_date = models.DateField(null=True, blank=True)
-
-    contains_sensitive_data = models.BooleanField(default=False)
-    sensitive_data_nature = models.TextField(blank=True)
-
-    reproduction_conditions = models.TextField(blank=True)
-
-    # Rights
-    rights_copyright_status = models.CharField(max_length=100, blank=True,
-        help_text='copyrighted | public_domain | unknown')
-    rights_holder_name = models.TextField(blank=True)
-    rights_statement = models.TextField(blank=True,
-        help_text='RightsStatements.org URI or text')
-    rights_license = models.CharField(max_length=100, blank=True,
-        help_text='CC-BY, CC-BY-SA, etc.')
-    rights_note = models.TextField(blank=True)
-
-    # Language
-    language_codes = models.JSONField(blank=True, null=True,
-        help_text='ISO 639-2 codes: ["eng", "spa", "que"]')
-    language_note = models.TextField(blank=True)
-
-    physical_characteristics = models.TextField(blank=True)
-    technical_requirements = models.TextField(blank=True)
-
-    finding_aids = models.TextField(blank=True)
-    finding_aid_url = models.URLField(blank=True)
-
-    # =========================================================================
-    # ISAD(G) 3.5 ALLIED MATERIALS AREA
-    # =========================================================================
-
-    location_of_originals = models.TextField(blank=True,
-        help_text='If this is a copy, where are originals?')
-    physical_location = models.TextField(blank=True,
-        help_text='Institution, city, country holding originals')
-    physical_collection = models.CharField(max_length=500, blank=True,
-        help_text='Collection title and number')
-    physical_box = models.CharField(max_length=50, blank=True)
-    physical_folder = models.CharField(max_length=50, blank=True)
-    physical_location_note = models.TextField(blank=True)
-
-    location_of_copies = models.TextField(blank=True)
-    related_units = models.TextField(blank=True)
-    publication_note = models.TextField(blank=True)
-
-    # =========================================================================
-    # ISAD(G) 3.6 & 3.7 NOTES AND DESCRIPTION CONTROL
-    # =========================================================================
-
-    notes = models.TextField(blank=True)
-    internal_notes = models.TextField(blank=True,
-        help_text='Staff-only notes, not published')
-
-    cataloger_name = models.CharField(max_length=255, blank=True)
-    rules_conventions = models.TextField(blank=True)
-    description_date = models.DateField(null=True, blank=True)
-    description_revision_date = models.DateField(null=True, blank=True)
-    description_status = models.CharField(max_length=50,
-        choices=DescriptionStatus.choices, blank=True)
-    statement_of_responsibility = models.TextField(blank=True)
-
-    # =========================================================================
-    # PROVENANCE DETAILS (for books, periodicals, photographs, etc.)
-    # =========================================================================
-
-    author = models.TextField(blank=True)
-    scribe = models.TextField(blank=True)
-    publisher = models.TextField(blank=True)
-    publisher_location = models.CharField(max_length=255, blank=True)
-    editor = models.TextField(blank=True)
-    photographer = models.TextField(blank=True)
-    artist = models.TextField(blank=True)
-    composer = models.TextField(blank=True)
-    director = models.TextField(blank=True)
-
-    # Periodicals
+    # --- Bibliographic (for printed materials) ---
+    imprint = models.CharField(max_length=500, blank=True)
+    edition_statement = models.CharField(max_length=500, blank=True)
+    series_statement = models.CharField(max_length=500, blank=True)
     volume_number = models.CharField(max_length=50, blank=True)
     issue_number = models.CharField(max_length=50, blank=True)
-    page_number = models.CharField(max_length=50, blank=True)
+    pages = models.CharField(max_length=100, blank=True)
 
-    # =========================================================================
-    # SUBJECTS & KEYWORDS
-    # =========================================================================
+    # --- Context (ISAD 3.2) ---
+    provenance = models.TextField(blank=True)
 
-    subjects_topic = models.JSONField(blank=True, null=True,
-        help_text='Topic keywords: ["slavery", "mining"]')
-    subjects_geographic = models.JSONField(blank=True, null=True,
-        help_text='Place names as text (also linked via Place model)')
-    subjects_temporal = models.JSONField(blank=True, null=True,
-        help_text='Time periods: ["Colonial period", "18th century"]')
-    subjects_name_string = models.JSONField(blank=True, null=True,
-        help_text='Person/organization names as text')
+    # --- Content (ISAD 3.3) ---
+    scope_content = models.TextField(blank=True)
+    arrangement = models.TextField(blank=True)
 
-    # =========================================================================
-    # DIGITAL ATTACHMENTS
-    # =========================================================================
+    # --- Access (ISAD 3.4) ---
+    access_conditions = models.TextField(blank=True)
+    reproduction_conditions = models.TextField(blank=True)
+    language = models.CharField(max_length=100, blank=True)
 
-    external_url = models.URLField(blank=True)
-    external_url_label = models.CharField(max_length=255, blank=True)
+    # --- Rights ---
+    rights_status = models.CharField(max_length=50, blank=True)
+    rights_holder = models.CharField(max_length=255, blank=True)
+    rights_statement = models.TextField(blank=True)
 
+    # --- Allied Materials (ISAD 3.5) ---
+    location_of_originals = models.TextField(blank=True)
+    related_materials = models.TextField(blank=True)
+
+    # --- Notes (ISAD 3.6) ---
+    notes = models.TextField(blank=True)
+    internal_notes = models.TextField(blank=True)
+
+    # --- Denormalized for Display/Search ---
+    creator_display = models.CharField(max_length=500, blank=True)
+    place_display = models.CharField(max_length=500, blank=True)
+
+    # --- Performance ---
+    path_cache = models.CharField(max_length=500, blank=True, db_index=True)
+
+    # --- Digital ---
     iiif_manifest_url = models.URLField(blank=True)
-    iiif_manifest_version = models.CharField(max_length=10, blank=True)
+    has_digital = models.BooleanField(default=False)
 
-    digital_folder_name = models.CharField(max_length=500, blank=True)
-    digital_file_count = models.IntegerField(default=0)
-    digital_file_format = models.CharField(max_length=50, blank=True)
-    digitization_date = models.DateField(null=True, blank=True)
-    digitization_notes = models.TextField(blank=True)
+    # --- Workflow ---
+    is_published = models.BooleanField(default=True)
+    needs_review = models.BooleanField(default=False)
+    review_note = models.TextField(blank=True)
 
-    # =========================================================================
-    # COMPUTED & DISPLAY
-    # =========================================================================
+    # --- Provenance (CA migration) ---
+    ca_object_id = models.IntegerField(null=True, blank=True, db_index=True)
+    ca_collection_id = models.IntegerField(null=True, blank=True, db_index=True)
 
-    has_digital_files = models.BooleanField(default=False)
-    has_external_link = models.BooleanField(default=False)
-    descendant_count = models.IntegerField(default=0)
-
-    sequence_number = models.IntegerField(null=True, blank=True)
-    sort_key = models.CharField(max_length=500, blank=True)
-
-    # =========================================================================
-    # PUBLICATION & VISIBILITY
-    # =========================================================================
-
-    is_published = models.BooleanField(default=False)
-    publication_date = models.DateField(null=True, blank=True)
-    featured = models.BooleanField(default=False)
-
-    # =========================================================================
-    # METADATA
-    # =========================================================================
-
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL,
-        null=True, blank=True, related_name='created_catalog_units')
-    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL,
-        null=True, blank=True, related_name='updated_catalog_units')
+    # --- Timestamps ---
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(User, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name='+')
+    updated_by = models.ForeignKey(User, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name='+')
 
     class MPTTMeta:
-        order_insertion_by = ['sequence_number', 'title']
+        order_insertion_by = ['local_identifier']
 
     class Meta:
-        verbose_name = 'catalog unit'
-        verbose_name_plural = 'catalog units'
+        verbose_name_plural = 'descriptions'
         ordering = ['tree_id', 'lft']
 
     def __str__(self):
         return self.title[:100] if len(self.title) > 100 else self.title
 
-    @property
-    def reference_code(self):
-        """
-        ISAD(G) 3.1.1 reference code: CountryCode-RepoCode-LocalIdentifier
-        Auto-generated from repository and local_identifier.
-        """
-        if not self.local_identifier:
-            return None
-        repo_code = self.repository.repository_code or ''
-        country_code = self.repository.country_code or ''
-        parts = [p for p in [country_code, repo_code, self.local_identifier] if p]
-        return '-'.join(parts) if parts else None
 
-    def get_breadcrumb(self):
-        """Return list of ancestors for breadcrumb navigation."""
-        return self.get_ancestors(include_self=True)
+class Entity(models.Model):
+    """
+    Authority record for persons, families, or corporate bodies.
+    ISAAR(CPF) inspired but simplified.
+    """
+
+    class EntityType(models.TextChoices):
+        PERSON = 'person', 'Persona'
+        FAMILY = 'family', 'Familia'
+        CORPORATE = 'corporate', 'Entidad corporativa'
+
+    # --- Identity (ISAAR 5.1) ---
+    display_name = models.CharField(max_length=500, db_index=True)
+    sort_name = models.CharField(max_length=500, db_index=True)
+    entity_type = models.CharField(max_length=20, choices=EntityType.choices)
+
+    # --- Variants ---
+    name_variants = models.JSONField(default=list, blank=True)
+
+    # --- Description (ISAAR 5.2) ---
+    dates_of_existence = models.CharField(max_length=100, blank=True)
+    date_start = models.DateField(null=True, blank=True)
+    date_end = models.DateField(null=True, blank=True)
+    history = models.TextField(blank=True)
+
+    # For corporate bodies
+    legal_status = models.CharField(max_length=100, blank=True)
+    functions = models.TextField(blank=True)
+
+    # --- Control (ISAAR 5.4) ---
+    sources = models.TextField(blank=True)
+
+    # --- Workflow ---
+    needs_review = models.BooleanField(default=False)
+    review_note = models.TextField(blank=True)
+
+    # For deduplication
+    merged_into = models.ForeignKey('self', null=True, blank=True,
+                                    on_delete=models.SET_NULL,
+                                    related_name='merged_records')
+
+    # --- Provenance (CA migration) ---
+    ca_entity_id = models.IntegerField(null=True, unique=True, db_index=True)
+
+    # --- Timestamps ---
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = 'entities'
+        ordering = ['sort_name']
+
+    def __str__(self):
+        return self.display_name
 
 
 class Place(models.Model):
     """
-    Geocoded geographic entities (gazetteer).
-    Supports historical place names and colonial administrative hierarchies.
+    Geographic authority record with optional coordinates.
+    Canonical places - CA duplicates are merged here.
     """
 
     class PlaceType(models.TextChoices):
-        CITY = 'city', 'City'
-        TOWN = 'town', 'Town'
-        VILLAGE = 'village', 'Village'
-        REGION = 'region', 'Region'
-        PROVINCE = 'province', 'Province'
-        DEPARTMENT = 'department', 'Department'
-        COUNTRY = 'country', 'Country'
-        RIVER = 'river', 'River'
-        MOUNTAIN = 'mountain', 'Mountain'
-        OTHER = 'other', 'Other'
+        COUNTRY = 'country', 'Pais'
+        REGION = 'region', 'Region/Audiencia'
+        DEPARTMENT = 'department', 'Departamento'
+        PROVINCE = 'province', 'Provincia'
+        PARTIDO = 'partido', 'Partido (colonial)'
+        CITY = 'city', 'Ciudad'
+        TOWN = 'town', 'Villa/Pueblo'
+        PARISH = 'parish', 'Parroquia'
+        HACIENDA = 'hacienda', 'Hacienda'
+        MINE = 'mine', 'Real de minas'
+        RIVER = 'river', 'Rio'
+        OTHER = 'other', 'Otro'
 
-    # Identification
-    gazetteer_id = models.CharField(max_length=100, blank=True,
-        help_text='External ID (e.g., GeoNames, custom gazetteer)')
-    gazetteer_source = models.CharField(max_length=100, blank=True,
-        help_text='Source gazetteer name')
+    # --- Identity ---
+    label = models.CharField(max_length=255, db_index=True)
+    display_name = models.CharField(max_length=500)
+    place_type = models.CharField(max_length=50, choices=PlaceType.choices,
+                                  blank=True)
 
-    # Names
-    label = models.CharField(max_length=255,
-        help_text='Normalized modern name')
-    historical_name = models.CharField(max_length=500, blank=True,
-        help_text='Period-specific or original name')
+    # --- Variants ---
+    name_variants = models.JSONField(default=list, blank=True)
 
-    # Classification
-    place_type = models.CharField(max_length=100, choices=PlaceType.choices, blank=True)
+    # --- Hierarchy ---
+    parent = models.ForeignKey('self', on_delete=models.SET_NULL,
+                               null=True, blank=True, related_name='children')
 
-    # Geocoding
-    latitude = models.DecimalField(max_digits=10, decimal_places=8,
-        null=True, blank=True,
-        validators=[MinValueValidator(-90), MaxValueValidator(90)])
-    longitude = models.DecimalField(max_digits=11, decimal_places=8,
-        null=True, blank=True,
-        validators=[MinValueValidator(-180), MaxValueValidator(180)])
-    coordinate_precision = models.CharField(max_length=50, blank=True,
-        help_text='exact | approximate | centroid')
-    coordinate_source = models.CharField(max_length=255, blank=True)
+    # --- Geography ---
+    latitude = models.DecimalField(max_digits=9, decimal_places=6,
+                                   null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6,
+                                    null=True, blank=True)
+    coordinate_precision = models.CharField(max_length=20, blank=True)
 
-    # Modern administrative divisions
-    country_code = models.CharField(max_length=3, blank=True,
-        help_text='ISO 3166-1 alpha-3')
-    admin_level_1 = models.CharField(max_length=255, blank=True,
-        help_text='State/Department/Region')
-    admin_level_2 = models.CharField(max_length=255, blank=True,
-        help_text='Province/County')
-    admin_level_3 = models.CharField(max_length=255, blank=True,
-        help_text='Municipality/District')
+    # Colonial context (for CIHJML gazetteer matching)
+    colonial_gobernacion = models.CharField(max_length=100, blank=True)
+    colonial_partido = models.CharField(max_length=100, blank=True)
+    colonial_region = models.CharField(max_length=10, blank=True)
 
-    # Historical administrative divisions (colonial period)
-    historical_admin_1 = models.CharField(max_length=255, blank=True,
-        help_text='e.g., "Popayan" (Gobernación)')
-    historical_admin_2 = models.CharField(max_length=255, blank=True,
-        help_text='e.g., "Cali" (Partido)')
-    historical_region = models.CharField(max_length=100, blank=True,
-        help_text='e.g., "QUI" (Quito audiencia)')
+    # Modern context
+    country_code = models.CharField(max_length=3, blank=True)
+    admin_level_1 = models.CharField(max_length=100, blank=True)
+    admin_level_2 = models.CharField(max_length=100, blank=True)
 
-    # Hierarchy within gazetteer
-    parent_place = models.ForeignKey('self', on_delete=models.SET_NULL,
-        null=True, blank=True, related_name='child_places')
+    # --- Workflow ---
+    needs_geocoding = models.BooleanField(default=True)
+    needs_review = models.BooleanField(default=False)
+    review_note = models.TextField(blank=True)
 
-    # Metadata
-    notes = models.TextField(blank=True)
-    is_active = models.BooleanField(default=True)
+    # For deduplication
+    merged_into = models.ForeignKey('self', null=True, blank=True,
+                                    on_delete=models.SET_NULL,
+                                    related_name='merged_places')
+
+    # --- Provenance (CA migration) ---
+    ca_place_ids = models.JSONField(default=list, blank=True)
+
+    # --- Timestamps ---
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -498,55 +302,98 @@ class Place(models.Model):
         ordering = ['label']
 
     def __str__(self):
-        if self.historical_name and self.historical_name != self.label:
-            return f"{self.label} ({self.historical_name})"
-        return self.label
-
-    @property
-    def coordinates(self):
-        """Return (lat, lon) tuple if both are set."""
-        if self.latitude and self.longitude:
-            return (float(self.latitude), float(self.longitude))
-        return None
+        return self.display_name
 
 
-class CatalogUnitPlace(models.Model):
+class DescriptionEntity(models.Model):
     """
-    Links catalog units to places with role context.
+    Links archival descriptions to entities with typed roles.
+    Replaces CA's ca_objects_x_entities.
     """
 
-    class PlaceRole(models.TextChoices):
-        MENTIONED = 'mentioned', 'Mentioned'
-        CREATED_AT = 'created_at', 'Created At'
-        SUBJECT = 'subject', 'Subject'
-        SENT_FROM = 'sent_from', 'Sent From'
-        SENT_TO = 'sent_to', 'Sent To'
-        PUBLISHED_AT = 'published_at', 'Published At'
-        DEPICTED = 'depicted', 'Depicted'
-        OTHER = 'other', 'Other'
+    class Role(models.TextChoices):
+        # General
+        CREATOR = 'creator', 'Creador'
+        AUTHOR = 'author', 'Autor'
+        EDITOR = 'editor', 'Editor'
+        PUBLISHER = 'publisher', 'Impresor/Editorial'
+        # Correspondence
+        SENDER = 'sender', 'Remitente'
+        RECIPIENT = 'recipient', 'Destinatario'
+        # Mentions
+        MENTIONED = 'mentioned', 'Mencionado'
+        SUBJECT = 'subject', 'Tema'
+        # Notarial/legal
+        SCRIBE = 'scribe', 'Escribano'
+        WITNESS = 'witness', 'Testigo'
+        NOTARY = 'notary', 'Notario'
+        # Visual materials
+        PHOTOGRAPHER = 'photographer', 'Fotografo'
+        ARTIST = 'artist', 'Artista'
 
-    catalog_unit = models.ForeignKey(CatalogUnit, on_delete=models.CASCADE,
-        related_name='place_links')
-    place = models.ForeignKey(Place, on_delete=models.CASCADE,
-        related_name='catalog_unit_links')
+    description = models.ForeignKey(Description, on_delete=models.CASCADE,
+                                    related_name='entity_links')
+    entity = models.ForeignKey(Entity, on_delete=models.PROTECT,
+                               related_name='description_links')
+    role = models.CharField(max_length=20, choices=Role.choices)
 
-    place_role = models.CharField(max_length=50, choices=PlaceRole.choices,
-        default=PlaceRole.MENTIONED)
     role_note = models.TextField(blank=True)
-    sequence_number = models.IntegerField(null=True, blank=True)
+    sequence = models.PositiveIntegerField(default=0)
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    # Workflow
+    needs_review = models.BooleanField(default=False)
+
+    # Provenance
+    ca_relationship_id = models.IntegerField(null=True, blank=True)
 
     class Meta:
-        verbose_name = 'catalog unit place'
-        verbose_name_plural = 'catalog unit places'
-        ordering = ['sequence_number', 'place__label']
-        constraints = [
-            models.UniqueConstraint(
-                fields=['catalog_unit', 'place', 'place_role'],
-                name='unique_catalog_unit_place_role'
-            )
+        verbose_name = 'description-entity link'
+        verbose_name_plural = 'description-entity links'
+        unique_together = ['description', 'entity', 'role']
+        ordering = ['sequence', 'entity__sort_name']
+        indexes = [
+            models.Index(fields=['entity', 'role']),
         ]
 
     def __str__(self):
-        return f"{self.catalog_unit} → {self.place} ({self.get_place_role_display()})"
+        return f"{self.description} - {self.entity} ({self.get_role_display()})"
+
+
+class DescriptionPlace(models.Model):
+    """
+    Links archival descriptions to places with typed roles.
+    Replaces CA's ca_objects_x_places.
+    """
+
+    class Role(models.TextChoices):
+        CREATED = 'created', 'Lugar de creacion'
+        SUBJECT = 'subject', 'Tema/Asunto'
+        MENTIONED = 'mentioned', 'Mencionado'
+        SENT_FROM = 'sent_from', 'Enviado desde'
+        SENT_TO = 'sent_to', 'Enviado a'
+        PUBLISHED = 'published', 'Publicado en'
+
+    description = models.ForeignKey(Description, on_delete=models.CASCADE,
+                                    related_name='place_links')
+    place = models.ForeignKey(Place, on_delete=models.PROTECT,
+                              related_name='description_links')
+    role = models.CharField(max_length=20, choices=Role.choices)
+
+    role_note = models.TextField(blank=True)
+
+    # Workflow
+    needs_review = models.BooleanField(default=False)
+
+    # Provenance
+    ca_relationship_id = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'description-place link'
+        verbose_name_plural = 'description-place links'
+        unique_together = ['description', 'place', 'role']
+        indexes = [
+            models.Index(fields=['place', 'role']),
+        ]
+
+    def __str__(self):
+        return f"{self.description} - {self.place} ({self.get_role_display()})"
