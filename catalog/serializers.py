@@ -45,8 +45,8 @@ class EntitySerializer(serializers.ModelSerializer):
     class Meta:
         model = Entity
         fields = [
-            'id', 'display_name', 'sort_name', 'entity_type',
-            'dates_of_existence', 'history'
+            'id', 'entity_code', 'display_name', 'sort_name', 'entity_type',
+            'honorific', 'primary_function', 'dates_of_existence', 'history'
         ]
 
 
@@ -69,7 +69,10 @@ class DescriptionEntitySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DescriptionEntity
-        fields = ['entity', 'role', 'role_note', 'sequence']
+        fields = [
+            'entity', 'role', 'role_note', 'sequence',
+            'honorific', 'function', 'name_as_recorded'
+        ]
 
 
 class DescriptionPlaceSerializer(serializers.ModelSerializer):

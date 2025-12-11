@@ -179,13 +179,20 @@ class EntityViewSet(viewsets.ReadOnlyModelViewSet):
     API endpoint for entities (persons, organizations).
 
     list: Get all entities
-    retrieve: Get a single entity with linked descriptions
+    retrieve: Get a single entity with linked descriptions (by ID or entity_code)
     """
     queryset = Entity.objects.filter(merged_into__isnull=True).order_by('sort_name')
     serializer_class = EntitySerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['display_name', 'sort_name']
+    search_fields = ['display_name', 'sort_name', 'entity_code']
     ordering_fields = ['sort_name', 'created_at']
+
+    def get_object(self):
+        """Allow lookup by entity_code (ne-xxxxx) or numeric ID."""
+        pk = self.kwargs.get('pk')
+        if pk and pk.startswith('ne-'):
+            return self.queryset.get(entity_code=pk)
+        return super().get_object()
 
     def get_queryset(self):
         queryset = super().get_queryset()
