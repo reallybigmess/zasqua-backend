@@ -320,6 +320,11 @@ class Command(BaseCommand):
                         date_end=date_end,
                         date_expression=self.build_date_expression(row),
                         place_display=place_display,
+                        # MPTT placeholder values (will be rebuilt in Phase 6)
+                        lft=0,
+                        rght=0,
+                        tree_id=0,
+                        level=0,
                     ))
                     batch_refs.append(ref_code)
 
@@ -344,6 +349,18 @@ class Command(BaseCommand):
                 created += len(batch)
 
         self.log(f'  Created {created:,} items, skipped {skipped} (missing parent)')
+
+        # Rebuild ref_to_id lookup from database (MySQL bulk_create doesn't return IDs)
+        self.log('  Rebuilding item ID lookup...', newline=False)
+        item_refs = dict(
+            Description.objects.filter(
+                repository=self.repo,
+                description_level='item'
+            ).values_list('reference_code', 'id')
+        )
+        self.ref_to_id.update(item_refs)
+        self.log(f' {len(item_refs):,} items indexed')
+
         self.log_elapsed()
 
     def import_entities(self, dry_run):
@@ -443,6 +460,17 @@ class Command(BaseCommand):
                 created += len(batch)
 
         self.log(f'  Created {created:,} entities, skipped {skipped:,} (already exist)')
+
+        # Rebuild entity_code_to_id lookup from database (MySQL bulk_create doesn't return IDs)
+        if created > 0 and not dry_run:
+            self.log('  Rebuilding entity ID lookup...', newline=False)
+            entity_ids = dict(
+                Entity.objects.filter(entity_code__startswith='ne-')
+                .values_list('entity_code', 'id')
+            )
+            self.entity_code_to_id.update(entity_ids)
+            self.log(f' {len(entity_ids):,} entities indexed')
+
         self.log_elapsed()
 
     def import_entity_links(self, dry_run):
