@@ -2,6 +2,7 @@
 REST API Serializers for Zasqua Catalog.
 """
 
+import re
 from rest_framework import serializers
 from .models import (
     Repository, Description, Entity, Place,
@@ -106,26 +107,48 @@ class DescriptionListSerializer(serializers.ModelSerializer):
         ]
 
     def get_has_children(self, obj):
-        return obj.get_descendant_count() > 0
+        # Use MPTT's lft/rght values - no DB query needed
+        # A node has children if rght - lft > 1
+        return (obj.rght - obj.lft) > 1
 
     def get_child_count(self, obj):
+        # Use annotated value if available, otherwise fall back to query
+        if hasattr(obj, '_child_count'):
+            return obj._child_count
         return obj.get_children().count()
 
     def get_children_level(self, obj):
-        """Return the description_level of the first child, or infer from title patterns."""
-        first_child = obj.get_children().first()
-        if first_child:
-            # Check if title suggests a container type (Caja, Carpeta, Legajo, Tomo)
-            title_lower = first_child.title.lower()
-            if title_lower.startswith('caja '):
-                return 'caja'
-            elif title_lower.startswith('carpeta '):
-                return 'carpeta'
-            elif title_lower.startswith('legajo '):
-                return 'legajo'
-            elif title_lower.startswith('tomo '):
-                return 'tomo'
-            return first_child.description_level
+        """Infer children level from reference_code pattern - no DB query needed."""
+        ref = obj.reference_code or ''
+        level = obj.description_level
+
+        # Check reference code patterns (AHR convention)
+        # Fonds (co-ahr-gob) -> children are cajas
+        # Caja (co-ahr-gob-caj001) -> children are carpetas
+        # Carpeta (co-ahr-gob-caj001-car001) -> children are items
+
+        if re.search(r'-caj\d+$', ref):
+            return 'carpeta'
+        elif re.search(r'-car\d+$', ref):
+            return 'item'
+        elif re.search(r'-leg\d+$', ref):
+            return 'item'
+        elif re.search(r'-tom\d+$', ref):
+            return 'item'
+
+        # Infer from description_level hierarchy
+        # Standard archival levels: fonds > subfonds > series > subseries > file > item
+        level_hierarchy = {
+            'fonds': 'caja',        # AHR fonds have cajas
+            'collection': 'file',   # Collections have files
+            'subfonds': 'series',
+            'series': 'subseries',
+            'subseries': 'file',
+            'file': 'item',
+        }
+        if level in level_hierarchy:
+            return level_hierarchy[level]
+
         return None
 
 

@@ -2,7 +2,7 @@
 REST API Views for Zasqua Catalog.
 """
 
-from django.db.models import Q
+from django.db.models import Q, Count
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
@@ -60,6 +60,13 @@ class DescriptionViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+
+        # Annotate child_count for list views (avoids N+1 queries)
+        # This counts direct children using parent_id foreign key
+        if self.action == 'list':
+            queryset = queryset.annotate(
+                _child_count=Count('children')
+            )
 
         # Filter by repository
         repository_id = self.request.query_params.get('repository')
@@ -163,7 +170,8 @@ class DescriptionViewSet(viewsets.ReadOnlyModelViewSet):
             all: If 'true', return all children without pagination (default: true)
         """
         description = self.get_object()
-        children = description.get_children()
+        # Annotate child_count to avoid N+1 queries in serializer
+        children = description.get_children().annotate(_child_count=Count('children'))
 
         # By default, return all children for tree navigation
         # Use ?all=false to get paginated results
