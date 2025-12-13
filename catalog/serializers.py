@@ -118,7 +118,7 @@ class DescriptionListSerializer(serializers.ModelSerializer):
         return obj.get_children().count()
 
     def get_children_level(self, obj):
-        """Infer children level from reference_code pattern - no DB query needed."""
+        """Infer children level from reference_code pattern or check for mixed types."""
         ref = obj.reference_code or ''
         level = obj.description_level
 
@@ -135,8 +135,28 @@ class DescriptionListSerializer(serializers.ModelSerializer):
             return 'item'
         elif re.search(r'-tom\d+$', ref):
             return 'item'
+        elif re.search(r'-t\d+$', ref):  # Tomo pattern (co-ahr-con-t003)
+            return 'item'
         elif re.search(r'-aht-\d+$', ref):  # AHRB legajos (co-ahrb-aht-003)
             return 'item'
+
+        # For fonds-level items, check if children have mixed types
+        if level == 'fonds' and hasattr(obj, '_child_count') and obj._child_count > 0:
+            # Quick check: sample first few children reference codes
+            children_refs = list(obj.get_children().values_list('reference_code', flat=True)[:20])
+            has_caja = any('-caj' in r for r in children_refs)
+            has_tomo = any('-tom' in r or '-t0' in r for r in children_refs)
+            has_carpeta = any('-car' in r for r in children_refs)
+
+            types_found = sum([has_caja, has_tomo, has_carpeta])
+            if types_found > 1:
+                return None  # Mixed types - frontend will show "unidades compuestas"
+            elif has_caja:
+                return 'caja'
+            elif has_tomo:
+                return 'tomo'
+            elif has_carpeta:
+                return 'carpeta'
 
         # Infer from description_level hierarchy
         # Standard archival levels: fonds > subfonds > series > subseries > file > item
