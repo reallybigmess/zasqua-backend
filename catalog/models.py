@@ -133,6 +133,7 @@ class Description(MPTTModel):
 
     # --- Content (ISAD 3.3) ---
     scope_content = models.TextField(blank=True)
+    ocr_text = models.TextField(blank=True, default='')
     arrangement = models.TextField(blank=True)
 
     # --- Access (ISAD 3.4) ---

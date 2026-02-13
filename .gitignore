@@ -18,6 +18,9 @@ db.sqlite3
 staticfiles/
 media/
 
+# Frontend data export
+export/
+
 # Environment
 .env
 .env.local

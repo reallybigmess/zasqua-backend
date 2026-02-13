@@ -98,7 +98,7 @@ class DescriptionListSerializer(serializers.ModelSerializer):
         model = Description
         fields = [
             'id', 'repository_code', 'reference_code', 'local_identifier',
-            'title', 'description_level', 'date_expression',
+            'title', 'description_level', 'date_expression', 'date_start',
             'parent_id', 'parent_reference_code',
             'has_children', 'child_count', 'children_level', 'has_digital',
             # Include key metadata for description pages
