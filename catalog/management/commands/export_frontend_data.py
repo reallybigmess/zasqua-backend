@@ -66,6 +66,8 @@ def _children_level(ref, level, child_refs):
         return 'item'
     if re.search(r'-aht-\d+$', ref):
         return 'item'
+    if re.search(r'-cab-\d+$', ref):
+        return 'item'
 
     if level == 'fonds' and child_refs:
         sample = child_refs[:20]
