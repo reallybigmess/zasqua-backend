@@ -72,7 +72,12 @@ def _children_level(ref, level, child_refs):
         has_caja = any('-caj' in r for r in sample)
         has_tomo = any('-tom' in r or '-t0' in r for r in sample)
         has_carpeta = any('-car' in r for r in sample)
-        types = sum([has_caja, has_tomo, has_carpeta])
+        has_legajo = any(
+            re.search(r'-aht-\d+$', r) or re.search(r'-leg\d+$', r)
+            or re.search(r'-cab-\d+$', r)
+            for r in sample
+        )
+        types = sum([has_caja, has_tomo, has_carpeta, has_legajo])
         if types > 1:
             return None
         if has_caja:
@@ -81,10 +86,7 @@ def _children_level(ref, level, child_refs):
             return 'tomo'
         if has_carpeta:
             return 'carpeta'
-
-    if level == 'series' and child_refs:
-        sample = child_refs[:20]
-        if any(re.search(r'-aht-\d+$', r) or re.search(r'-leg\d+$', r) for r in sample):
+        if has_legajo:
             return 'legajo'
 
     return _LEVEL_HIERARCHY.get(level)
