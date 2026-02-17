@@ -1,20 +1,20 @@
 # Zasqua Backend
 
-Django REST API backend for the Zasqua archival platform.
+Django application for the [Zasqua](https://zasqua.org) archival platform.
 
 ## Overview
 
-This backend provides:
-- REST API for archival descriptions and entities
-- Meilisearch integration for full-text search
-- MPTT-based hierarchical data model
-- Management commands for data import
+Zasqua Backend manages archival descriptions, entities, and places for four Colombian and one Peruvian repository — roughly 104,000 descriptions and 52,000 entities. It provides:
+
+- REST API for archival descriptions, entities, and places
+- MPTT-based hierarchical data model (archival fonds, series, items)
+- Management commands for data import and frontend export
+- IIIF manifest generation for digitized materials
 
 ## Requirements
 
 - Python 3.11+
 - MySQL 8.0+
-- Meilisearch 1.0+
 
 ## Setup
 
@@ -26,7 +26,7 @@ source venv/bin/activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure database
+# Configure environment
 cp .env.example .env
 # Edit .env with your database credentials
 
@@ -41,12 +41,12 @@ python manage.py runserver
 
 | Model | Description |
 |-------|-------------|
-| Repository | Archive institutions (e.g., CO.AHR, PE-BN) |
+| Repository | Archive institutions (AHR, AHRB, CIHJML, AHJCI, PE-BN) |
 | Description | Archival descriptions with MPTT hierarchy |
 | Entity | People, organizations, families |
 | Place | Geographic locations |
-| DescriptionEntity | Links descriptions to entities |
-| DescriptionPlace | Links descriptions to places |
+| DescriptionEntity | Links descriptions to entities with roles |
+| DescriptionPlace | Links descriptions to places with roles |
 
 ## API Endpoints
 
@@ -59,33 +59,59 @@ python manage.py runserver
 | `/api/descriptions/{id}/children/` | Child descriptions |
 | `/api/entities/` | List entities |
 | `/api/places/` | List places |
-| `/api/search/` | Meilisearch search endpoint |
 
 ## Management Commands
 
 ### Data Import
+
 ```bash
-# Import AHR hierarchy from CSVs
+# Import from CollectiveAccess MySQL database
+python manage.py import_ca --phase [descriptions|entities|places|links]
+
+# Import AHR hierarchy from clean CSVs
 python manage.py import_ahr_hierarchy
 
-# With dry run
-python manage.py import_ahr_hierarchy --dry-run
+# Import AHT item-level records from CSV
+python manage.py import_aht_items
+
+# Update AHT legajo containers with metadata from CSV
+python manage.py update_aht_legajos
+
+# Import OCR text from CA representations
+python manage.py import_ocr_text
+
+# Restructure PE-BN CDIP items into section-level hierarchy
+python manage.py restructure_pebn_sections
 ```
 
-### Search Index
+### Data Export
+
 ```bash
-# Rebuild Meilisearch index
-python manage.py rebuild_search_index --clear
+# Export JSON data for frontend static build
+python manage.py export_frontend_data
+
+# Export item metadata for title/entity processing
+python manage.py export_acc_metadata
 ```
 
-### Database Utilities
+### IIIF
+
 ```bash
-# Check counts by repository
-python manage.py shell -c "
-from catalog.models import Description, Repository
-for r in Repository.objects.all():
-    print(f'{r.code}: {Description.objects.filter(repository=r).count()}')"
+# Generate IIIF manifests for digitized descriptions
+python manage.py generate_iiif_manifests --tiles-dir /path/to/tiles
 ```
+
+All import commands support `--dry-run` to preview changes without modifying the database.
+
+## Data Summary
+
+| Repository | Location | Descriptions |
+|------------|----------|-------------|
+| AHR | Rionegro, Antioquia | ~53,000 |
+| AHRB | Tunja, Boyaca | ~8,300 |
+| CIHJML | Popayan, Cauca | ~25,000 |
+| AHJCI | Istmina, Choco | ~300 |
+| PE-BN | Lima, Peru | ~17,000 |
 
 ## Development
 
@@ -96,21 +122,14 @@ python manage.py test
 
 ### Code Style
 ```bash
-# Format code
 black .
-
-# Check linting
 flake8
 ```
 
-## Data Summary
+## License
 
-| Repository | Records | Entities |
-|------------|---------|----------|
-| CO.AHR (Rionegro) | 55,353 | 88,646 links |
-| CO.AHRB (Boyaca) | 7,669 | - |
-| CIHJML (Popayan) | 26,000+ | - |
-| PE-BN (Peru) | 14,000+ | - |
-| AHJCI (Istmina) | 800+ | - |
+GPL-3.0. See [LICENSE](LICENSE) for details.
 
-Total: ~104,000 descriptions, ~75,000 entities
+---
+
+Zasqua is developed by [Neogranadina](https://neogranadina.org) and the [Archives, Memory, and Preservation Lab](https://ampl.clair.ucsb.edu) of the University of California, Santa Barbara.
