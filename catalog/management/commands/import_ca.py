@@ -303,11 +303,11 @@ CA_DB_CONFIG = {
 # Repository mappings from CA collection IDs
 # Codes normalized to: {country}-{repo} format, lowercase
 REPOSITORY_MAP = {
-    712: {'code': 'co-cihjml', 'name': 'Centro de Investigaciones Históricas José María Arboleda Llorente, Universidad del Cauca', 'city': 'Popayán', 'country_code': 'COL'},
-    360: {'code': 'pe-bn', 'name': 'Biblioteca Nacional del Perú', 'city': 'Lima', 'country_code': 'PER'},
-    14805: {'code': 'co-ahrb', 'name': 'Archivo Histórico Regional de Boyacá', 'city': 'Tunja', 'country_code': 'COL'},
-    14940: {'code': 'co-ahr', 'name': 'Archivo Histórico de Rionegro', 'city': 'Rionegro', 'country_code': 'COL'},
-    16479: {'code': 'co-ahjci', 'name': 'Archivo Histórico del Juzgado de Istmina', 'city': 'Istmina', 'country_code': 'COL'},
+    712: {'code': 'co-cihjml', 'name': 'Centro de Investigaciones Históricas José María Arboleda Llorente, Universidad del Cauca', 'city': 'Popayán', 'country_code': 'COL', 'country': 'Colombia'},
+    360: {'code': 'pe-bn', 'name': 'Biblioteca Nacional del Perú', 'city': 'Lima', 'country_code': 'PER', 'country': 'Perú'},
+    14805: {'code': 'co-ahrb', 'name': 'Archivo Histórico Regional de Boyacá', 'city': 'Tunja', 'country_code': 'COL', 'country': 'Colombia'},
+    14940: {'code': 'co-ahr', 'name': 'Archivo Histórico de Rionegro', 'city': 'Rionegro', 'country_code': 'COL', 'country': 'Colombia'},
+    16479: {'code': 'co-ahjci', 'name': 'Archivo Histórico del Juzgado del Circuito de Istmina', 'city': 'Istmina', 'country_code': 'COL', 'country': 'Colombia'},
 }
 
 # Old code -> new code mapping (for migrations)
@@ -378,7 +378,7 @@ CA_ATTRIBUTE_MAP = {
 
     # Allied materials (ISAD 3.5)
     'originalsloc': 'location_of_originals',
-    'otherfindingaid': 'related_materials',
+    'otherfindingaid': 'finding_aids',
 
     # Bibliographic (PE-BN CDIP printed materials)
     'narra_imprenta': 'imprint',
@@ -386,6 +386,9 @@ CA_ATTRIBUTE_MAP = {
     'narra_edic_vol': 'edition_statement',
     'narra_tomo_titulo': 'series_statement',  # e.g. "Tomo 1, Los Ideólogos"
     'narra_vol_titulo': 'uniform_title',      # e.g. "Volumen 1, Juan Pablo Viscardo..."
+
+    # Section title (PE-BN CDIP)
+    'narra_secc_titulo': 'section_title',
 
     # Notes
     'note': 'notes',
@@ -470,6 +473,7 @@ class Command(BaseCommand):
                         'name': data['name'],
                         'city': data['city'],
                         'country_code': data['country_code'],
+                        'country': data['country'],
                     }
                 )
                 status = 'created' if created else 'updated'
@@ -1159,6 +1163,12 @@ class Command(BaseCommand):
                         elif len(value) > len(existing):
                             # Both look valid, prefer longer (more specific) date
                             attrs_by_id[row_id][elem] = value
+                elif elem == 'note':
+                    # Concatenate multiple notes with pipe separator
+                    if elem in attrs_by_id[row_id]:
+                        attrs_by_id[row_id][elem] += ' | ' + value
+                    else:
+                        attrs_by_id[row_id][elem] = value
                 else:
                     # For other elements, store first non-empty value
                     if elem not in attrs_by_id[row_id]:
@@ -1183,7 +1193,7 @@ class Command(BaseCommand):
         # Update descriptions in batches
         self.stdout.write("  Updating descriptions...")
 
-        fields_to_update = list(set(CA_ATTRIBUTE_MAP.values())) + ['date_start', 'date_end', 'date_certainty']
+        fields_to_update = sorted(set(CA_ATTRIBUTE_MAP.values())) + ['date_start', 'date_end', 'date_certainty']
 
         batch_size = 1000
         total_updated = 0

@@ -53,30 +53,30 @@ _LANGUAGE_MAP = {
 
 _ATTRIBUTION = {
     'co-cihjml': {
-        'en': ('{repo}, Colombia. Digitized by Neogranadina '
+        'en': ('{repo}, {country_en}. Digitized by Neogranadina '
                'and hosted on Zasqua (zasqua.org).'),
-        'es': ('{repo}, Colombia. Digitalizado por Neogranadina '
+        'es': ('{repo}, {country}. Digitalizado por Neogranadina '
                'y alojado en Zasqua (zasqua.org).'),
     },
     'co-ahrb': {
-        'en': ('{repo}, Colombia. Digitized by Neogranadina '
+        'en': ('{repo}, {country_en}. Digitized by Neogranadina '
                'and hosted on Zasqua (zasqua.org).'),
-        'es': ('{repo}, Colombia. Digitalizado por Neogranadina '
+        'es': ('{repo}, {country}. Digitalizado por Neogranadina '
                'y alojado en Zasqua (zasqua.org).'),
     },
     'pe-bn': {
-        'en': ('{repo}, Peru. Processed by Neogranadina '
+        'en': ('{repo}, {country_en}. Processed by Neogranadina '
                'and hosted on Zasqua (zasqua.org).'),
-        'es': ('{repo}, Perú. Procesado por Neogranadina '
+        'es': ('{repo}, {country}. Procesado por Neogranadina '
                'y alojado en Zasqua (zasqua.org).'),
     },
     'co-ahjci': {
-        'en': ('{repo}, Colombia. Digitized under the Endangered '
+        'en': ('{repo}, {country_en}. Digitized under the Endangered '
                'Archives Programme (EAP 1477), funded by Arcadia '
                'and held at the British Library. CC BY-NC 4.0. '
                'Processed by Neogranadina and hosted on '
                'Zasqua (zasqua.org).'),
-        'es': ('{repo}, Colombia. Digitalizado en el marco del '
+        'es': ('{repo}, {country}. Digitalizado en el marco del '
                'Endangered Archives Programme (EAP 1477), financiado '
                'por Arcadia y custodiado en la British Library. '
                'CC BY-NC 4.0. Procesado por Neogranadina y alojado '
@@ -86,8 +86,14 @@ _ATTRIBUTION = {
 
 # Fallback for any repository not listed above
 _ATTRIBUTION_DEFAULT = {
-    'en': ('{repo}. Hosted on Zasqua (zasqua.org).'),
-    'es': ('{repo}. Alojado en Zasqua (zasqua.org).'),
+    'en': ('{repo}, {country_en}. Hosted on Zasqua (zasqua.org).'),
+    'es': ('{repo}, {country}. Alojado en Zasqua (zasqua.org).'),
+}
+
+# Country display names (Spanish → English)
+_COUNTRY_EN = {
+    'Colombia': 'Colombia',
+    'Perú': 'Peru',
 }
 
 
@@ -356,12 +362,17 @@ def build_manifest(description, images, base_url, doc_slug):
     if repo.city:
         repo_display += f", {repo.city}"
 
+    country = repo.country or ''
+    country_en = _COUNTRY_EN.get(country, country)
+
     attr = _ATTRIBUTION.get(repo.code, _ATTRIBUTION_DEFAULT)
     manifest.requiredStatement = KeyValueString(
         label={"en": ["Attribution"], "es": ["Atribución"]},
         value={
-            "en": [attr['en'].format(repo=repo_display)],
-            "es": [attr['es'].format(repo=repo_display)],
+            "en": [attr['en'].format(repo=repo_display, country=country,
+                                     country_en=country_en)],
+            "es": [attr['es'].format(repo=repo_display, country=country,
+                                     country_en=country_en)],
         },
     )
 

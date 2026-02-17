@@ -42,6 +42,7 @@ class Repository(models.Model):
     name = models.CharField(max_length=255)
     short_name = models.CharField(max_length=200, blank=True)
     country_code = models.CharField(max_length=3, default='COL')
+    country = models.CharField(max_length=100, blank=True)
     city = models.CharField(max_length=100, blank=True)
 
     # Optional
@@ -150,6 +151,10 @@ class Description(MPTTModel):
     # --- Allied Materials (ISAD 3.5) ---
     location_of_originals = models.TextField(blank=True)
     related_materials = models.TextField(blank=True)
+    finding_aids = models.TextField(blank=True)
+
+    # --- Bibliographic (section title from CA) ---
+    section_title = models.CharField(max_length=500, blank=True)
 
     # --- Notes (ISAD 3.6) ---
     notes = models.TextField(blank=True)

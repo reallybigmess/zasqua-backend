@@ -140,11 +140,16 @@ class Command(BaseCommand):
             .select_related('repository', 'parent')
             .order_by('id')
             .values(
-                'id', 'repository__code', 'reference_code', 'local_identifier',
+                'id', 'repository__code', 'repository__country',
+                'reference_code', 'local_identifier',
                 'title', 'description_level', 'date_expression', 'date_start',
                 'parent_id', 'parent__reference_code',
                 'scope_content', 'ocr_text', 'extent', 'arrangement',
-                'access_conditions', 'language', 'notes',
+                'access_conditions', 'reproduction_conditions', 'language',
+                'location_of_originals', 'related_materials', 'finding_aids',
+                'notes',
+                'imprint', 'edition_statement', 'series_statement',
+                'uniform_title', 'section_title', 'pages',
                 'creator_display', 'place_display',
                 'has_digital', 'iiif_manifest_url', 'lft', 'rght',
             )
@@ -192,9 +197,15 @@ class Command(BaseCommand):
 
         desc_records = []
         for d in rows:
+            # Publication title — hardcoded for PE-BN CDIP items
+            publication_title = ''
+            if d['repository__code'] == 'pe-bn' and d['series_statement']:
+                publication_title = 'Colección Documental de la Independencia del Perú'
+
             desc_records.append({
                 'id': d['id'],
                 'repository_code': d['repository__code'],
+                'country': d['repository__country'] or '',
                 'reference_code': d['reference_code'],
                 'local_identifier': d['local_identifier'],
                 'title': d['title'],
@@ -215,8 +226,20 @@ class Command(BaseCommand):
                 'extent': d['extent'],
                 'arrangement': d['arrangement'],
                 'access_conditions': d['access_conditions'],
+                'reproduction_conditions': d['reproduction_conditions'],
                 'language': _LANGUAGE_MAP.get(d['language'], d['language']),
+                'location_of_originals': d['location_of_originals'],
+                'related_materials': d['related_materials'],
+                'finding_aids': d['finding_aids'],
                 'notes': d['notes'],
+                # Bibliographic
+                'publication_title': publication_title,
+                'imprint': d['imprint'],
+                'edition_statement': d['edition_statement'],
+                'series_statement': d['series_statement'],
+                'uniform_title': d['uniform_title'],
+                'section_title': d['section_title'],
+                'pages': d['pages'],
                 'creator_display': d['creator_display'],
                 'place_display': d['place_display'],
             })
@@ -258,6 +281,7 @@ class Command(BaseCommand):
                 'name': repo.name,
                 'short_name': repo.short_name,
                 'country_code': repo.country_code,
+                'country': repo.country,
                 'city': repo.city,
                 'address': repo.address,
                 'website': repo.website,
