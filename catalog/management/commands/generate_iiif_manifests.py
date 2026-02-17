@@ -48,6 +48,50 @@ _LANGUAGE_MAP = {
 
 
 # ---------------------------------------------------------------------------
+# Per-repository attribution
+# ---------------------------------------------------------------------------
+
+_ATTRIBUTION = {
+    'co-cihjml': {
+        'en': ('{repo}, Colombia. Digitized by Neogranadina '
+               'and hosted on Zasqua (zasqua.org).'),
+        'es': ('{repo}, Colombia. Digitalizado por Neogranadina '
+               'y alojado en Zasqua (zasqua.org).'),
+    },
+    'co-ahrb': {
+        'en': ('{repo}, Colombia. Digitized by Neogranadina '
+               'and hosted on Zasqua (zasqua.org).'),
+        'es': ('{repo}, Colombia. Digitalizado por Neogranadina '
+               'y alojado en Zasqua (zasqua.org).'),
+    },
+    'pe-bn': {
+        'en': ('{repo}, Peru. Processed by Neogranadina '
+               'and hosted on Zasqua (zasqua.org).'),
+        'es': ('{repo}, Perú. Procesado por Neogranadina '
+               'y alojado en Zasqua (zasqua.org).'),
+    },
+    'co-ahjci': {
+        'en': ('{repo}, Colombia. Digitized under the Endangered '
+               'Archives Programme (EAP 1477), funded by Arcadia '
+               'and held at the British Library. CC BY-NC 4.0. '
+               'Processed by Neogranadina and hosted on '
+               'Zasqua (zasqua.org).'),
+        'es': ('{repo}, Colombia. Digitalizado en el marco del '
+               'Endangered Archives Programme (EAP 1477), financiado '
+               'por Arcadia y custodiado en la British Library. '
+               'CC BY-NC 4.0. Procesado por Neogranadina y alojado '
+               'en Zasqua (zasqua.org).'),
+    },
+}
+
+# Fallback for any repository not listed above
+_ATTRIBUTION_DEFAULT = {
+    'en': ('{repo}. Hosted on Zasqua (zasqua.org).'),
+    'es': ('{repo}. Alojado en Zasqua (zasqua.org).'),
+}
+
+
+# ---------------------------------------------------------------------------
 # Image name extraction (shared with generate_tiles_production.py)
 # ---------------------------------------------------------------------------
 
@@ -303,9 +347,40 @@ def build_manifest(description, images, base_url, doc_slug):
     )
     manifest.behavior = ["paged"]
 
+    # Rights — CC BY-NC 4.0 for all repositories
+    manifest.rights = "http://creativecommons.org/licenses/by-nc/4.0/"
+
+    # Required statement — per-repository attribution
+    repo = description.repository
+    repo_display = repo.name
+    if repo.city:
+        repo_display += f", {repo.city}"
+
+    attr = _ATTRIBUTION.get(repo.code, _ATTRIBUTION_DEFAULT)
+    manifest.requiredStatement = KeyValueString(
+        label={"en": ["Attribution"], "es": ["Atribución"]},
+        value={
+            "en": [attr['en'].format(repo=repo_display)],
+            "es": [attr['es'].format(repo=repo_display)],
+        },
+    )
+
+    # Provider — Neogranadina
+    manifest.provider = [{
+        "id": "https://neogranadina.org",
+        "type": "Agent",
+        "label": {"en": ["Neogranadina"], "es": ["Neogranadina"]},
+        "homepage": [{
+            "id": "https://zasqua.org",
+            "type": "Text",
+            "format": "text/html",
+            "label": {"en": ["Zasqua"], "es": ["Zasqua"]},
+        }],
+    }]
+
     # Homepage — link to Zasqua description page
     manifest.homepage = [{
-        "id": f"https://zasqua.org/descriptions/{description.reference_code}/",
+        "id": f"https://zasqua.org/{description.reference_code}/",
         "type": "Text",
         "label": {"es": [description.title]},
         "format": "text/html",
@@ -316,11 +391,6 @@ def build_manifest(description, images, base_url, doc_slug):
         manifest.summary = {"es": [description.scope_content]}
 
     # Metadata fields with bilingual labels
-    repo = description.repository
-    repo_display = repo.name
-    if repo.city:
-        repo_display += f", {repo.city}"
-
     language = _LANGUAGE_MAP.get(
         description.language, description.language
     )
