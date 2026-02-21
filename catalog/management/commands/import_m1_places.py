@@ -8,6 +8,7 @@ Usage:
     python manage.py import_m1_places
     python manage.py import_m1_places --dry-run
     python manage.py import_m1_places --csv-path /path/to/places.csv
+    python manage.py import_m1_places --csv-path pe_bn_places.csv --append
 """
 
 import csv
@@ -83,6 +84,11 @@ class Command(BaseCommand):
             default=DEFAULT_CSV_PATH,
             help='Path to places.csv (default: M1 review output)',
         )
+        parser.add_argument(
+            '--append',
+            action='store_true',
+            help='Add to existing place data instead of replacing it (for PE-BN and other additive passes)',
+        )
 
     # ------------------------------------------------------------------ #
     # Logging helpers                                                       #
@@ -113,14 +119,18 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.dry_run = options['dry_run']
-        csv_path = options['csv_path']
+        self.append  = options['append']
+        csv_path     = options['csv_path']
 
         if self.dry_run:
             self.log(self.style.WARNING('DRY RUN — no changes will be made'))
+        if self.append:
+            self.log(self.style.WARNING('APPEND MODE — existing place data will not be deleted'))
 
         rows = self._load_csv(csv_path)
         unique_places = self._deduplicate(rows)
-        self._delete_existing()
+        if not self.append:
+            self._delete_existing()
         name_to_id = self._create_places(unique_places)
         self._create_links(rows, name_to_id)
         self._summary(unique_places)
@@ -233,9 +243,24 @@ class Command(BaseCommand):
     def _create_places(self, unique_places):
         self.log_phase('Phase 4: Creating Place records with nl-xxxxx codes')
 
+        # In append mode, build a lookup of existing places first so we
+        # can reuse their IDs instead of creating duplicates.
+        existing = {}
+        if self.append:
+            self.log('  Loading existing place index...', newline=False)
+            for label, place_id in Place.objects.values_list('label', 'id'):
+                existing[normalize_name(label)] = place_id
+            self.log(f' {len(existing):,} existing places indexed')
+
+        # Only create places whose normalised key is not already in the DB
+        to_create = [p for p in unique_places if p['norm_key'] not in existing]
+        reused    = len(unique_places) - len(to_create)
+        if self.append:
+            self.log(f'  Reusing existing: {reused:,}  |  New to create: {len(to_create):,}')
+
         # Pre-generate unique codes (bulk_create bypasses save())
         self.log('  Pre-generating place codes...', newline=False)
-        needed = len(unique_places)
+        needed = len(to_create)
         codes = set()
         while len(codes) < needed:
             codes.add(generate_neogranadina_code(prefix='nl', length=5))
@@ -244,11 +269,14 @@ class Command(BaseCommand):
 
         if self.dry_run:
             self.log(f'  Would create {needed:,} Place records')
-            return {p['norm_key']: i + 1 for i, p in enumerate(unique_places)}
+            lookup = dict(existing)
+            for i, p in enumerate(to_create):
+                lookup[p['norm_key']] = -(i + 1)
+            return lookup
 
         batch = []
         created = 0
-        for i, place in enumerate(unique_places):
+        for i, place in enumerate(to_create):
             batch.append(Place(
                 place_code=codes[i],
                 label=place['canonical_name'],
