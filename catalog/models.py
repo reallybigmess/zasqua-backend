@@ -25,7 +25,6 @@ def generate_neogranadina_code(prefix='ne', length=5):
     Format: {prefix}-{alphanumeric}
     - ne-xxxxx for entities (entidad)
     - nl-xxxxx for places (lugar)
-    - nd-xxxxx for descriptions (documento)
     """
     # Lowercase + digits, removing ambiguous chars (0/o, 1/l)
     alphabet = 'abcdefghijkmnpqrstuvwxyz23456789'  # 32 chars
@@ -251,6 +250,10 @@ class Entity(models.Model):
                                     on_delete=models.SET_NULL,
                                     related_name='merged_records')
 
+    # --- Linked Open Data ---
+    wikidata_id = models.CharField(max_length=20, blank=True, null=True, db_index=True)
+    viaf_id = models.CharField(max_length=20, blank=True, null=True)
+
     # --- Provenance (CA migration) ---
     ca_entity_id = models.IntegerField(null=True, unique=True, db_index=True)
 
@@ -347,6 +350,9 @@ class Place(models.Model):
         OTHER = 'other', 'Otro'
 
     # --- Identity ---
+    place_code = models.CharField(max_length=8, blank=True, null=True, unique=True,
+                                  db_index=True,
+                                  help_text='Unique identifier (nl-xxxxx) for URLs and citations')
     label = models.CharField(max_length=255, db_index=True)
     display_name = models.CharField(max_length=500)
     place_type = models.CharField(max_length=50, choices=PlaceType.choices,
@@ -386,6 +392,12 @@ class Place(models.Model):
                                     on_delete=models.SET_NULL,
                                     related_name='merged_places')
 
+    # --- Linked Open Data ---
+    tgn_id = models.CharField(max_length=20, blank=True, null=True, db_index=True)
+    hgis_id = models.CharField(max_length=50, blank=True, null=True)
+    whg_id = models.CharField(max_length=50, blank=True, null=True)
+    wikidata_id = models.CharField(max_length=20, blank=True, null=True)
+
     # --- Provenance (CA migration) ---
     ca_place_ids = models.JSONField(default=list, blank=True)
 
@@ -396,6 +408,17 @@ class Place(models.Model):
     class Meta:
         verbose_name_plural = 'places'
         ordering = ['label']
+
+    def save(self, *args, **kwargs):
+        if not self.place_code:
+            for _ in range(10):
+                code = generate_neogranadina_code(prefix='nl', length=5)
+                if not Place.objects.filter(place_code=code).exists():
+                    self.place_code = code
+                    break
+            else:
+                raise ValueError("Could not generate unique place_code")
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.display_name
@@ -426,6 +449,28 @@ class DescriptionEntity(models.Model):
         # Visual materials
         PHOTOGRAPHER = 'photographer', 'Fotografo'
         ARTIST = 'artist', 'Artista'
+        # Legal proceedings
+        PLAINTIFF = 'plaintiff', 'Demandante'
+        DEFENDANT = 'defendant', 'Demandado'
+        PETITIONER = 'petitioner', 'Peticionario'
+        JUDGE = 'judge', 'Juez'
+        APPELLANT = 'appellant', 'Apelante'
+        # Administrative
+        OFFICIAL = 'official', 'Oficial'
+        # Family / personal
+        HEIR = 'heir', 'Heredero'
+        ALBACEA = 'albacea', 'Albacea'
+        SPOUSE = 'spouse', 'Conyuge'
+        VICTIM = 'victim', 'Victima'
+        # Transactions
+        GRANTOR = 'grantor', 'Otorgante'
+        DONOR = 'donor', 'Donante'
+        SELLER = 'seller', 'Vendedor'
+        BUYER = 'buyer', 'Comprador'
+        MORTGAGOR = 'mortgagor', 'Deudor hipotecario'
+        MORTGAGEE = 'mortgagee', 'Acreedor hipotecario'
+        CREDITOR = 'creditor', 'Acreedor'
+        DEBTOR = 'debtor', 'Deudor'
 
     description = models.ForeignKey(Description, on_delete=models.CASCADE,
                                     related_name='entity_links')
@@ -476,6 +521,7 @@ class DescriptionPlace(models.Model):
         SENT_FROM = 'sent_from', 'Enviado desde'
         SENT_TO = 'sent_to', 'Enviado a'
         PUBLISHED = 'published', 'Publicado en'
+        VENUE = 'venue', 'Lugar del acto'
 
     description = models.ForeignKey(Description, on_delete=models.CASCADE,
                                     related_name='place_links')
