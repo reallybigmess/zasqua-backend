@@ -27,6 +27,19 @@ from catalog.models import Description, Repository
 
 
 # ---------------------------------------------------------------------------
+# Per-repository text for image reproduction conditions and copies location
+# ---------------------------------------------------------------------------
+
+_IMAGE_REPRODUCTION = {
+    'pe-bn': 'Imágenes digitales disponibles en Zasqua mediante IIIF. CC BY-NC 4.0. Para obtener derechos de reproducción para publicaciones, por favor diríjase a la Biblioteca Nacional del Perú.',
+    'co-cihjml': 'Imágenes digitales disponibles en Zasqua mediante IIIF. CC BY-NC 4.0. Para obtener derechos de reproducción para publicaciones, por favor diríjase al CIHJML, Universidad del Cauca.',
+    'co-ahr': 'Imágenes digitales disponibles en Zasqua mediante IIIF. CC BY-NC 4.0. Para obtener derechos de reproducción para publicaciones, por favor diríjase al Archivo Histórico de Rionegro.',
+    'co-ahrb': 'Imágenes digitales disponibles en Zasqua mediante IIIF. CC BY-NC 4.0. Para obtener derechos de reproducción para publicaciones, por favor diríjase al Archivo Histórico Regional de Boyacá.',
+    'co-ahjci': 'Imágenes digitales disponibles en Zasqua mediante IIIF. CC BY-NC 4.0. Para obtener derechos de reproducción para publicaciones, por favor diríjase al Archivo Histórico del Juzgado del Circuito de Istmina.',
+}
+
+
+# ---------------------------------------------------------------------------
 # children_level inference — ported from DescriptionListSerializer
 # ---------------------------------------------------------------------------
 
@@ -146,7 +159,8 @@ class Command(BaseCommand):
                 'parent_id', 'parent__reference_code',
                 'scope_content', 'ocr_text', 'extent', 'arrangement',
                 'access_conditions', 'reproduction_conditions', 'language',
-                'location_of_originals', 'related_materials', 'finding_aids',
+                'location_of_originals', 'location_of_copies',
+                'related_materials', 'finding_aids',
                 'notes',
                 'imprint', 'edition_statement', 'series_statement',
                 'uniform_title', 'section_title', 'pages',
@@ -229,6 +243,7 @@ class Command(BaseCommand):
                 'reproduction_conditions': d['reproduction_conditions'],
                 'language': _LANGUAGE_MAP.get(d['language'], d['language']),
                 'location_of_originals': d['location_of_originals'],
+                'location_of_copies': d['location_of_copies'],
                 'related_materials': d['related_materials'],
                 'finding_aids': d['finding_aids'],
                 'notes': d['notes'],
@@ -290,6 +305,8 @@ class Command(BaseCommand):
                 'created_at': repo.created_at.isoformat(),
                 'updated_at': repo.updated_at.isoformat(),
                 'description_count': desc_counts.get(repo.code, 0),
+                'image_reproduction_text': _IMAGE_REPRODUCTION.get(
+                    repo.code, ''),
                 'root_descriptions': roots,
             })
 

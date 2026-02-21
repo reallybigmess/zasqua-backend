@@ -150,6 +150,7 @@ class Description(MPTTModel):
 
     # --- Allied Materials (ISAD 3.5) ---
     location_of_originals = models.TextField(blank=True)
+    location_of_copies = models.TextField(blank=True)
     related_materials = models.TextField(blank=True)
     finding_aids = models.TextField(blank=True)
 
