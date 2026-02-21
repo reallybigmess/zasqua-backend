@@ -235,6 +235,7 @@ class Command(BaseCommand):
                 'children_level': d['children_level'],
                 'has_digital': d['has_digital'],
                 'iiif_manifest_url': d['iiif_manifest_url'] or '',
+                'mets_url': f"https://mets.zasqua.org/{d['reference_code'].replace('?', '').replace('#', '')}.xml" if d['reference_code'] else '',
                 'scope_content': d['scope_content'],
                 'ocr_text': d['ocr_text'],
                 'extent': d['extent'],
