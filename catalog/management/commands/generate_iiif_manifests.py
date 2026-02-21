@@ -125,8 +125,21 @@ def extract_image_name(filename):
 
 
 def derive_doc_slug(object_idno):
-    """Derive a URL-safe doc-slug from a CA object_idno."""
+    """Derive a URL-safe doc-slug from a CA object_idno.
+
+    Used for tile paths (backward compatibility).  For new tile generation,
+    prefer manifest_slug_from_ref() which uses the full reference_code.
+    """
     return object_idno.lower().replace('.', '-').replace('_', '-')
+
+
+def manifest_slug_from_ref(reference_code):
+    """Derive manifest path slug from reference_code.
+
+    Strips characters that are unsafe in URLs (? and #).  Matches the
+    frontend safeSlug filter and METS URL computation.
+    """
+    return reference_code.replace('?', '').replace('#', '')
 
 
 # ---------------------------------------------------------------------------
@@ -333,19 +346,20 @@ def resolve_pdf_pages_from_counts(csv_docs, pdf_pages_path):
 # Manifest building (ported from generate_manifests.py)
 # ---------------------------------------------------------------------------
 
-def build_manifest(description, images, base_url, doc_slug):
+def build_manifest(description, images, base_url, manifest_slug, tile_slug):
     """Build a IIIF Presentation API v3 manifest.
 
     Args:
         description: Description model instance (with repository).
         images: List of image dicts with 'name', 'width', 'height'.
         base_url: Base URL for IIIF resources.
-        doc_slug: URL-safe document identifier.
+        manifest_slug: Slug for manifest paths/IDs (from reference_code).
+        tile_slug: Slug for tile image URLs (from object_idno).
 
     Returns:
         iiif_prezi3.Manifest object.
     """
-    manifest_id = f"{base_url}/{doc_slug}/manifest.json"
+    manifest_id = f"{base_url}/{manifest_slug}/manifest.json"
 
     manifest = Manifest(
         id=manifest_id,
@@ -397,6 +411,16 @@ def build_manifest(description, images, base_url, doc_slug):
         "format": "text/html",
     }]
 
+    # seeAlso — METS metadata
+    mets_slug = description.reference_code.replace('?', '').replace('#', '')
+    manifest.seeAlso = [{
+        "id": f"https://mets.zasqua.org/{mets_slug}.xml",
+        "type": "Dataset",
+        "label": {"en": ["METS metadata"], "es": ["Metadatos METS"]},
+        "format": "application/xml",
+        "profile": "http://www.loc.gov/METS/",
+    }]
+
     # Summary from scope_content
     if description.scope_content:
         manifest.summary = {"es": [description.scope_content]}
@@ -440,7 +464,7 @@ def build_manifest(description, images, base_url, doc_slug):
         height = img['height']
 
         canvas = manifest.make_canvas(
-            id=f"{base_url}/{doc_slug}/canvas/{i}",
+            id=f"{base_url}/{manifest_slug}/canvas/{i}",
             label={"none": [f"img {i}"]},
             height=height,
             width=width,
@@ -451,7 +475,7 @@ def build_manifest(description, images, base_url, doc_slug):
         thumb_h = round(height * thumb_w / width) if width > 0 else 200
         canvas.thumbnail = [{
             "id": (
-                f"{base_url}/{doc_slug}/{image_name}"
+                f"{base_url}/{tile_slug}/{image_name}"
                 f"/full/{thumb_w},{thumb_h}/0/default.jpg"
             ),
             "type": "Image",
@@ -463,18 +487,18 @@ def build_manifest(description, images, base_url, doc_slug):
         # Add painting annotation with image and ImageService3
         anno_page = canvas.add_image(
             image_url=(
-                f"{base_url}/{doc_slug}/{image_name}"
+                f"{base_url}/{tile_slug}/{image_name}"
                 f"/full/max/0/default.jpg"
             ),
-            anno_id=f"{base_url}/{doc_slug}/canvas/{i}/annotation",
-            anno_page_id=f"{base_url}/{doc_slug}/canvas/{i}/page",
+            anno_id=f"{base_url}/{manifest_slug}/canvas/{i}/annotation",
+            anno_page_id=f"{base_url}/{manifest_slug}/canvas/{i}/page",
             format="image/jpeg",
             height=height,
             width=width,
         )
         # Attach Level 0 ImageService3 to the image body
         anno_page.items[0].body.make_service(
-            id=f"{base_url}/{doc_slug}/{image_name}",
+            id=f"{base_url}/{tile_slug}/{image_name}",
             type="ImageService3",
             profile="level0",
         )
@@ -602,7 +626,8 @@ class Command(BaseCommand):
                 continue
 
             doc_data = csv_docs[ca_id]
-            doc_slug = doc_data['doc_slug']
+            tile_slug = doc_data['doc_slug']
+            m_slug = manifest_slug_from_ref(desc.reference_code)
             images = [
                 img for img in doc_data['images']
                 if 'name' in img and img['name'] != '__pdf__'
@@ -614,7 +639,7 @@ class Command(BaseCommand):
 
             if dry_run:
                 self.log(
-                    f"  [DRY RUN] {doc_slug}: "
+                    f"  [DRY RUN] {m_slug}: "
                     f"{len(images)} canvases"
                 )
                 generated += 1
@@ -622,11 +647,11 @@ class Command(BaseCommand):
 
             try:
                 manifest = build_manifest(
-                    desc, images, base_url, doc_slug
+                    desc, images, base_url, m_slug, tile_slug
                 )
 
                 # Write manifest JSON
-                manifest_dir = os.path.join(output_dir, doc_slug)
+                manifest_dir = os.path.join(output_dir, m_slug)
                 os.makedirs(manifest_dir, exist_ok=True)
                 manifest_path = os.path.join(manifest_dir, 'manifest.json')
 
@@ -634,17 +659,17 @@ class Command(BaseCommand):
                 with open(manifest_path, 'w') as f:
                     f.write(manifest_json)
 
-                manifest_url = f"{base_url}/{doc_slug}/manifest.json"
+                manifest_url = f"{base_url}/{m_slug}/manifest.json"
                 db_updates.append((desc.pk, manifest_url))
 
                 self.log(
-                    f"  {doc_slug}: {len(images)} canvases -> "
+                    f"  {m_slug}: {len(images)} canvases -> "
                     f"{manifest_path}"
                 )
                 generated += 1
 
             except Exception as e:
-                errors.append(f"{doc_slug}: {e}")
+                errors.append(f"{m_slug}: {e}")
 
         # Bulk update iiif_manifest_url in database
         if db_updates and not skip_db and not dry_run:
