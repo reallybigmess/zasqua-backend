@@ -119,6 +119,11 @@ class Command(BaseCommand):
             default=DEFAULT_CSV_PATH,
             help='Path to entities.csv (default: M1 review output)',
         )
+        parser.add_argument(
+            '--append',
+            action='store_true',
+            help='Add to existing entity data instead of replacing it (for PE-BN and other additive passes)',
+        )
 
     # ------------------------------------------------------------------ #
     # Logging helpers                                                       #
@@ -149,14 +154,18 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.dry_run = options['dry_run']
-        csv_path = options['csv_path']
+        self.append  = options['append']
+        csv_path     = options['csv_path']
 
         if self.dry_run:
             self.log(self.style.WARNING('DRY RUN — no changes will be made'))
+        if self.append:
+            self.log(self.style.WARNING('APPEND MODE — existing entity data will not be deleted'))
 
         rows = self._load_csv(csv_path)
         unique_entities = self._deduplicate(rows)
-        self._delete_existing()
+        if not self.append:
+            self._delete_existing()
         name_to_id = self._create_entities(unique_entities)
         self._create_links(rows, name_to_id)
         self._summary(unique_entities)
@@ -283,9 +292,26 @@ class Command(BaseCommand):
     def _create_entities(self, unique_entities):
         self.log_phase('Phase 4: Creating Entity records with ne-xxxxx codes')
 
+        # In append mode, build a lookup of existing entities first so we
+        # can reuse their IDs instead of creating duplicates.
+        existing = {}
+        if self.append:
+            self.log('  Loading existing entity index...', newline=False)
+            for display_name, entity_type, entity_id in Entity.objects.values_list(
+                'display_name', 'entity_type', 'id'
+            ):
+                existing[(normalize_name(display_name), entity_type)] = entity_id
+            self.log(f' {len(existing):,} existing entities indexed')
+
+        # Only create entities whose normalised key is not already in the DB
+        to_create = [e for e in unique_entities if e['norm_key'] not in existing]
+        reused    = len(unique_entities) - len(to_create)
+        if self.append:
+            self.log(f'  Reusing existing: {reused:,}  |  New to create: {len(to_create):,}')
+
         # Pre-generate enough unique codes (bulk_create bypasses save())
         self.log('  Pre-generating entity codes...', newline=False)
-        needed = len(unique_entities)
+        needed = len(to_create)
         codes = set()
         while len(codes) < needed:
             codes.add(generate_neogranadina_code(prefix='ne', length=5))
@@ -294,12 +320,15 @@ class Command(BaseCommand):
 
         if self.dry_run:
             self.log(f'  Would create {needed:,} Entity records')
-            # Return synthetic lookup for dry-run stats
-            return {e['norm_key']: i + 1 for i, e in enumerate(unique_entities)}
+            # Return synthetic lookup for dry-run stats (existing + new)
+            lookup = dict(existing)
+            for i, e in enumerate(to_create):
+                lookup[e['norm_key']] = -(i + 1)  # negative = synthetic dry-run ID
+            return lookup
 
         batch = []
         created = 0
-        for i, ent in enumerate(unique_entities):
+        for i, ent in enumerate(to_create):
             batch.append(Entity(
                 entity_code=codes[i],
                 display_name=ent['canonical_name'],
@@ -381,6 +410,7 @@ class Command(BaseCommand):
                     description_id=desc_id,
                     entity_id=entity_id,
                     role=role,
+                    function=row.get('function', '').strip(),
                     needs_review=True,
                 ))
                 if len(batch) >= BATCH_SIZE:
