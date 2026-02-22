@@ -23,7 +23,6 @@ METS metadata export, description page metadata improvements, and title improvem
 
 - Cleared incorrect PE-BN `reproduction_conditions` data (14,421 records)
 - Cleared `date_expression = '152'` data issue (4,888 records)
-- Fixed `pe-bn-cdip-00149` stale `iiif_manifest_url` pointing to localhost
 
 ## [0.2.0] — 2026-02-17
 
