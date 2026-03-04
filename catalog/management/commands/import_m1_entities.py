@@ -27,7 +27,7 @@ from catalog.models import (
 # Strip address prefixes only — NOT identity titles like Marqués, Conde, Duque,
 # Teniente, Gobernador, which ARE the entity name.
 HONORIFIC_PREFIXES = re.compile(
-    r'^(Don |Doña |Dona |Dr\. |Fray |Fr\. |Sor |Pbro\. |Pbra\. )',
+    r'^(Don |Doña |Dona |Dr\. |Fray |Fr\. |Sor |Pbro\. |Pbra\. |Sr\. )',
     re.IGNORECASE,
 )
 
@@ -95,6 +95,40 @@ ROLE_MAP = {
     # Place-vocabulary roles used for institutions — map to sender/recipient
     'origin': 'sender',
     'destination': 'recipient',
+    # PE-BN vocabulary
+    'signatory': 'creator',
+    'signer': 'creator',
+    'issuer': 'creator',
+    'proposer': 'petitioner',
+    'examiner': 'official',
+    'approver': 'official',
+    'secretary': 'official',
+    'fiscal': 'official',
+    'diputado': 'official',
+    'diputado secretario': 'official',
+    'presidente': 'official',
+    'rector': 'official',
+    'replier': 'recipient',
+    'informant': 'mentioned',
+    'contributor': 'mentioned',
+    'participant': 'mentioned',
+    'voter': 'mentioned',
+    'tribunal member': 'official',
+    'decision maker': 'official',
+    'decision-maker': 'official',
+    'decision_maker': 'official',
+    'executing officer': 'official',
+    'hearing authority': 'official',
+    'absentee voter': 'mentioned',
+    'crew member': 'mentioned',
+    'crew officer': 'official',
+    'military commander': 'official',
+    'military officer': 'official',
+    'ship captain': 'official',
+    'port official': 'official',
+    'intervening official': 'official',
+    'contracting party': 'mentioned',
+    'appointed judge': 'judge',
 }
 
 DEFAULT_CSV_PATH = (
@@ -206,6 +240,12 @@ class Command(BaseCommand):
             name = row['name'].strip()
             raw_type = row.get('type', 'person').strip().lower()
             raw_role = row.get('role', 'mentioned').strip().lower()
+
+            # Strip multi-value roles: "recipient, signer" → "recipient"
+            if ',' in raw_role:
+                raw_role = raw_role.split(',')[0].strip()
+            elif '/' in raw_role:
+                raw_role = raw_role.split('/')[0].strip()
 
             entity_type = TYPE_MAP.get(raw_type)
             if not entity_type:
@@ -385,6 +425,12 @@ class Command(BaseCommand):
             raw_type = row.get('type', 'person').strip().lower()
             raw_role = row.get('role', 'mentioned').strip().lower()
 
+            # Strip multi-value roles: "recipient, signer" → "recipient"
+            if ',' in raw_role:
+                raw_role = raw_role.split(',')[0].strip()
+            elif '/' in raw_role:
+                raw_role = raw_role.split('/')[0].strip()
+
             entity_type = TYPE_MAP.get(raw_type)
             if not entity_type:
                 continue
@@ -411,6 +457,7 @@ class Command(BaseCommand):
                     entity_id=entity_id,
                     role=role,
                     function=row.get('function', '').strip(),
+                    name_as_recorded=row.get('name_as_recorded', '').strip(),
                     needs_review=True,
                 ))
                 if len(batch) >= BATCH_SIZE:

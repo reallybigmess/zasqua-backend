@@ -36,6 +36,10 @@ PLACE_ALIASES = {
     'santafe de bogota (ciudad)': 'santafe de bogota',
     # Cartagena — 'cartagena' (718) is far more frequent
     'cartagena de indias': 'cartagena',
+    # PE-BN vocabulary
+    'cusco': 'cuzco',
+    'cerro de paseo': 'cerro de pasco',
+    'cerro de pazco': 'cerro de pasco',
 }
 
 
@@ -60,6 +64,23 @@ ROLE_MAP = {
     'sent_from': 'sent_from',
     'sent_to': 'sent_to',
     'published': 'published',
+    # PE-BN vocabulary
+    'location': 'mentioned',
+    'jurisdiction': 'subject',
+    'sender_location': 'sent_from',
+    'origin_state': 'sent_from',
+    'signatory nation': 'mentioned',
+    'battle location': 'mentioned',
+    'battle site': 'mentioned',
+    'route': 'mentioned',
+    'represented': 'subject',
+    'publication origin': 'sent_from',
+    'port': 'mentioned',
+    'province': 'mentioned',
+    'city': 'mentioned',
+    'island': 'mentioned',
+    'capital': 'mentioned',
+    'sender': 'sent_from',
 }
 
 DEFAULT_CSV_PATH = (
@@ -168,6 +189,12 @@ class Command(BaseCommand):
         for row in rows:
             name = row['name'].strip()
             raw_role = row.get('role', 'mentioned').strip().lower()
+
+            # Strip multi-value roles: "recipient, signer" → "recipient"
+            if ',' in raw_role:
+                raw_role = raw_role.split(',')[0].strip()
+            elif '/' in raw_role:
+                raw_role = raw_role.split('/')[0].strip()
 
             if raw_role not in ROLE_MAP:
                 unknown_roles[raw_role] += 1
@@ -328,6 +355,12 @@ class Command(BaseCommand):
         for i, row in enumerate(rows):
             name = row['name'].strip()
             raw_role = row.get('role', 'mentioned').strip().lower()
+
+            # Strip multi-value roles: "recipient, signer" → "recipient"
+            if ',' in raw_role:
+                raw_role = raw_role.split(',')[0].strip()
+            elif '/' in raw_role:
+                raw_role = raw_role.split('/')[0].strip()
 
             role = ROLE_MAP.get(raw_role)
             if role is None:
