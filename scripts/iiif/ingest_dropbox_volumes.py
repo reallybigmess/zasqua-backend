@@ -73,12 +73,15 @@ _ATTRIBUTION = {
 def derive_volume_slug(fond, volume):
     """Derive a URL-safe slug from fond code and volume number.
 
+    All slugs carry the co- repository prefix to match the Zasqua
+    collection URL pattern (co-ahrb-...).
+
     Examples:
-        ('AHRB_AHT', '003') -> 'ahrb-aht-003'
-        ('AHRB_N1', '001')  -> 'ahrb-n1-001'
-        ('AHRB_NVL', '067') -> 'ahrb-nvl-067'
+        ('AHRB_AHT', '003') -> 'co-ahrb-aht-003'
+        ('AHRB_N1', '001')  -> 'co-ahrb-n1-001'
+        ('AHRB_NVL', '067') -> 'co-ahrb-nvl-067'
     """
-    return f"{fond.lower().replace('_', '-')}-{volume}"
+    return f"co-{fond.lower().replace('_', '-')}-{volume}"
 
 
 def derive_volume_label(fond, volume):
