@@ -144,8 +144,10 @@ def _natural_sort_key(s):
 def filter_aht_exclusions(volumes, r2_dirs):
     """Remove AHT volumes that already have tiles on R2.
 
-    An AHT volume is considered tiled if any R2 directory name starts with
-    ``co-ahrb-aht-{volume}-`` (document-level tile slugs).
+    An AHT volume is considered tiled if any R2 directory name matches
+    one of the known AHT tile slug patterns:
+      - Old format (v0.2.0): ``ahrb-aht-{volume}-d{doc}`` (no co- prefix)
+      - New format (v0.4.0): ``co-ahrb-aht-{volume}-{doc}``
 
     Args:
         volumes: list of volume dicts (fond, volume, image_dir, image_count).
@@ -157,13 +159,19 @@ def filter_aht_exclusions(volumes, r2_dirs):
     """
     # Build set of tiled AHT volume numbers from R2 dirs
     tiled_aht = set()
-    # R2 dirs look like "co-ahrb-aht-003-0001/" or "co-ahrb-aht-003-0001"
-    aht_pattern = re.compile(r"^co-ahrb-aht-(\d+[a-z]*)-\d+")
+    # Old format: "ahrb-aht-003-d001/" (v0.2.0 tiles, no co- prefix)
+    # New format: "co-ahrb-aht-003-0001/" (v0.4.0 tiles, with co- prefix)
+    aht_patterns = [
+        re.compile(r"^ahrb-aht-(\d+[a-z]*)-d\d+"),    # old format
+        re.compile(r"^co-ahrb-aht-(\d+[a-z]*)-\d+"),  # new format
+    ]
     for d in r2_dirs:
         d_clean = d.rstrip("/").split("/")[-1]  # strip path and trailing slash
-        m = aht_pattern.match(d_clean)
-        if m:
-            tiled_aht.add(m.group(1))
+        for pattern in aht_patterns:
+            m = pattern.match(d_clean)
+            if m:
+                tiled_aht.add(m.group(1))
+                break
 
     excluded = []
     filtered = []

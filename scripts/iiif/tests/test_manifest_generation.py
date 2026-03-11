@@ -187,15 +187,29 @@ class TestCSVOutput:
 # ---------------------------------------------------------------------------
 
 class TestAHTExclusion:
-    def test_exclusion_filters_aht_volumes(self):
-        """filter_aht_exclusions removes AHT volumes when their prefix is in tiled list."""
+    def test_exclusion_filters_aht_volumes_new_format(self):
+        """filter_aht_exclusions removes AHT volumes using new co- slug format."""
         volumes = [
             {"fond": "AHRB_AHT", "volume": "003", "image_dir": "x", "image_count": 1},
             {"fond": "AHRB_AHT", "volume": "005", "image_dir": "x", "image_count": 1},
             {"fond": "AHRB_N1",  "volume": "001", "image_dir": "x", "image_count": 1},
         ]
-        # Simulate R2 dirs containing tiles for AHT 003
+        # Simulate R2 dirs containing tiles for AHT 003 (new format with co-)
         r2_dirs = ["co-ahrb-aht-003-0001/", "co-ahrb-aht-003-0002/", "co-ahrb-n1-001-0001/"]
+        result, excluded = filter_aht_exclusions(volumes, r2_dirs)
+        remaining_aht = [v for v in result if v["fond"] == "AHRB_AHT"]
+        assert len(remaining_aht) == 1
+        assert remaining_aht[0]["volume"] == "005"
+        assert "003" in excluded
+
+    def test_exclusion_filters_aht_volumes_old_format(self):
+        """filter_aht_exclusions removes AHT volumes using old ahrb-aht- slug format."""
+        volumes = [
+            {"fond": "AHRB_AHT", "volume": "003", "image_dir": "x", "image_count": 1},
+            {"fond": "AHRB_AHT", "volume": "005", "image_dir": "x", "image_count": 1},
+        ]
+        # Old format (v0.2.0): no co- prefix, d-prefixed document number
+        r2_dirs = ["ahrb-aht-003-d001/", "ahrb-aht-003-d002/"]
         result, excluded = filter_aht_exclusions(volumes, r2_dirs)
         remaining_aht = [v for v in result if v["fond"] == "AHRB_AHT"]
         assert len(remaining_aht) == 1
