@@ -36,6 +36,7 @@ import shutil
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 from iiif_tiling import (
@@ -115,6 +116,20 @@ def log_progress(progress_path, slug):
     if progress_path:
         with open(progress_path, 'a') as f:
             f.write(slug + '\n')
+
+
+def log_errors(errors_path, slug, errors):
+    """Append error entries for a failed volume to the errors log.
+
+    Each error is written as one line:
+        <ISO timestamp> <slug>: <error detail>
+    """
+    if not errors_path or not errors:
+        return
+    ts = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    with open(errors_path, 'a') as f:
+        for err in errors:
+            f.write(f"{ts} {err}\n")
 
 
 # ---------------------------------------------------------------------------
@@ -278,6 +293,7 @@ def process_volume(volume, config):
     skip_pull = config['skip_pull']
     workers = config['workers']
     progress_path = config['progress_path']
+    errors_path = config['errors_path']
 
     images_dir = work_dir / 'images' / slug
     tiles_dir = work_dir / 'tiles' / slug
@@ -303,11 +319,13 @@ def process_volume(volume, config):
             result = subprocess.run(cmd, capture_output=True, text=True)
             if result.returncode != 0:
                 errors.append(f"{slug}: rclone pull failed: {result.stderr}")
+                log_errors(errors_path, slug, errors)
                 return slug, 0, time.time() - start, errors
 
         # Step 2: Discover and sort image files
         if not images_dir.exists():
             errors.append(f"{slug}: images directory not found: {images_dir}")
+            log_errors(errors_path, slug, errors)
             return slug, 0, time.time() - start, errors
 
         image_files = sorted(
@@ -319,6 +337,7 @@ def process_volume(volume, config):
 
         if not image_files:
             errors.append(f"{slug}: no image files found in {images_dir}")
+            log_errors(errors_path, slug, errors)
             return slug, 0, time.time() - start, errors
 
         print(f"  {slug}: {len(image_files)} images found")
@@ -341,6 +360,7 @@ def process_volume(volume, config):
 
             except Exception as e:
                 errors.append(f"{slug}/{image_path.name}: {e}")
+                break  # stop volume immediately on image error
 
         # Clean up vips-properties.xml
         vips_xml = tiles_dir / 'vips-properties.xml'
@@ -357,20 +377,23 @@ def process_volume(volume, config):
                 json.dumps(manifest, indent=2, ensure_ascii=False)
             )
 
-        # Step 5: Upload to R2
-        if not skip_upload and r2_remote and tiles_dir.exists():
+        # Step 5: Upload to R2 (only when no errors)
+        if not errors and not skip_upload and r2_remote and tiles_dir.exists():
             print(f"  Uploading {slug}...")
             upload_to_r2(tiles_dir, r2_remote, slug)
 
-        # Step 6: Clean up local files
-        if not skip_upload:
+        # Step 6: Clean up local files (only when successful — no errors)
+        if not errors and not skip_upload:
             if images_dir.exists():
                 shutil.rmtree(images_dir)
             if tiles_dir.exists():
                 shutil.rmtree(tiles_dir)
 
-        # Step 7: Log completion
-        log_progress(progress_path, slug)
+        # Step 7: Log completion or errors
+        if errors:
+            log_errors(errors_path, slug, errors)
+        else:
+            log_progress(progress_path, slug)
 
         elapsed = time.time() - start
         return slug, image_count, elapsed, errors
@@ -378,6 +401,7 @@ def process_volume(volume, config):
     except Exception as e:
         elapsed = time.time() - start
         errors.append(f"{slug}: {e}")
+        log_errors(errors_path, slug, errors)
         return slug, image_count if 'image_count' in dir() else 0, elapsed, errors
 
 
@@ -467,6 +491,10 @@ def main():
         help='Skip Dropbox pull (images already local)',
     )
     parser.add_argument(
+        '--errors-log', default='errors.log',
+        help='Path to errors log file (default: errors.log)',
+    )
+    parser.add_argument(
         '--force', action='store_true',
         help='Process volumes even if already in progress log',
     )
@@ -515,6 +543,7 @@ def main():
         'skip_pull': args.skip_pull,
         'workers': args.workers,
         'progress_path': args.progress,
+        'errors_path': args.errors_log,
     }
 
     # Ensure work directories exist
@@ -537,6 +566,11 @@ def main():
             status += f" ({len(errs)} errors)"
         status += f"  [{processed_count}/{len(volumes)}]"
         print(status)
+
+        # Halt the entire run on rclone pull failure
+        if any("rclone pull failed" in err for err in errs):
+            print(f"\nFATAL: rclone pull failed for {slug} — halting run.", file=sys.stderr)
+            sys.exit(1)
 
     total_elapsed = time.time() - start_time
     print(f"\nDone -- {total_images} images tiled across "
