@@ -282,5 +282,7 @@ def upload_to_r2(local_dir, r2_remote, doc_slug):
         'Cache-Control: public, max-age=31536000, immutable',
         '--transfers', '32',
         '--checkers', '16',
+        '--retries', '3',
+        '--retries-sleep', '5s',
     ]
     subprocess.run(cmd, check=True, capture_output=True)
