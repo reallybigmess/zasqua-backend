@@ -280,8 +280,8 @@ def upload_to_r2(local_dir, r2_remote, doc_slug):
         remote_path,
         '--header-upload',
         'Cache-Control: public, max-age=31536000, immutable',
-        '--transfers', '32',
-        '--checkers', '16',
+        '--transfers', '128',
+        '--checkers', '64',
         '--retries', '3',
         '--retries-sleep', '5s',
     ]
