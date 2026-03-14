@@ -101,7 +101,8 @@ def extract_tile_url(canvas: dict) -> str:
     Reads body.service[0].id from the canvas and appends
     /full/max/0/default.jpg as specified by IIIF Image API v3.
     """
-    service_id = canvas["body"]["service"][0]["id"]
+    annotation = canvas["items"][0]["items"][0]
+    service_id = annotation["body"]["service"][0]["id"]
     return f"{service_id}/full/max/0/default.jpg"
 
 
@@ -109,7 +110,10 @@ def fetch_manifest(slug: str, base_url: str, timeout: int = 30) -> tuple[dict | 
     """Fetch and parse a manifest JSON. Returns (manifest, error_msg)."""
     url = f"{base_url}/{slug}/manifest.json"
     try:
-        req = urllib.request.Request(url, headers={"Accept": "application/json"})
+        req = urllib.request.Request(url, headers={
+            "Accept": "application/json",
+            "User-Agent": "zasqua-verify/1.0",
+        })
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = resp.read()
             return json.loads(data), None
@@ -124,7 +128,9 @@ def fetch_manifest(slug: str, base_url: str, timeout: int = 30) -> tuple[dict | 
 def check_tile_url(url: str, timeout: int = 30) -> tuple[bool, str]:
     """HEAD-request a tile URL. Returns (ok, status_or_error)."""
     try:
-        req = urllib.request.Request(url, method="HEAD")
+        req = urllib.request.Request(url, method="HEAD", headers={
+            "User-Agent": "zasqua-verify/1.0",
+        })
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.status == 200, str(resp.status)
     except urllib.error.HTTPError as exc:
@@ -191,7 +197,7 @@ def run(base_url: str) -> bool:
     all_pass = True
     for slug, manifest_st, first_st, last_st in results:
         print(f"{slug:<35} {manifest_st:<18} {first_st:<14} {last_st}")
-        if "FAIL" in (manifest_st, first_st, last_st):
+        if any("FAIL" in s for s in (manifest_st, first_st, last_st)):
             all_pass = False
     print("=" * 80)
 

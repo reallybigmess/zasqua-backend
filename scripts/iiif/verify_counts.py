@@ -36,8 +36,20 @@ DEFAULT_WORKERS = 10
 RETRY_DELAY = 2  # seconds before retry on 429/5xx
 PROGRESS_INTERVAL = 50  # print progress every N volumes
 
-# Volumes expected to be absent (never processed).
-KNOWN_SKIPS = {"co-ahrb-n1-024bis"}
+# Volumes expected to be absent from co-* namespace.
+# - co-ahrb-n1-024bis: image_count=0, never processed
+# - co-ahrb-aht-003 through 023: 19 AHT volumes already tiled under old
+#   document-level slug format (ahrb-aht-NNN-dNNN), excluded from Phase 3
+KNOWN_SKIPS = {
+    "co-ahrb-n1-024bis",
+    "co-ahrb-aht-003", "co-ahrb-aht-004", "co-ahrb-aht-005",
+    "co-ahrb-aht-006", "co-ahrb-aht-007", "co-ahrb-aht-010",
+    "co-ahrb-aht-011", "co-ahrb-aht-012", "co-ahrb-aht-013",
+    "co-ahrb-aht-014", "co-ahrb-aht-015", "co-ahrb-aht-016",
+    "co-ahrb-aht-017", "co-ahrb-aht-018", "co-ahrb-aht-019",
+    "co-ahrb-aht-020", "co-ahrb-aht-021", "co-ahrb-aht-022",
+    "co-ahrb-aht-023",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +106,10 @@ def fetch_manifest_canvas_count(slug: str, base_url: str, timeout: int = 30) -> 
 
     def _fetch() -> tuple[int | None, str | None]:
         try:
-            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            req = urllib.request.Request(url, headers={
+                "Accept": "application/json",
+                "User-Agent": "zasqua-verify/1.0",
+            })
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 data = resp.read()
                 manifest = json.loads(data)
