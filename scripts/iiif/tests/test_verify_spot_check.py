@@ -23,28 +23,30 @@ from verify_spot_check import (
 # Fixtures
 # ---------------------------------------------------------------------------
 
-VALID_CANVAS = {
-    "type": "Canvas",
-    "body": {
-        "service": [
-            {"id": "https://iiif.zasqua.org/co-ahrb-n1-001/page-0001"}
-        ]
-    },
-}
+def _make_canvas(service_id):
+    """Build a minimal IIIF v3 canvas with proper AnnotationPage nesting."""
+    return {
+        "type": "Canvas",
+        "items": [{
+            "type": "AnnotationPage",
+            "items": [{
+                "type": "Annotation",
+                "body": {
+                    "service": [{"id": service_id}]
+                },
+            }],
+        }],
+    }
+
+
+VALID_CANVAS = _make_canvas("https://iiif.zasqua.org/co-ahrb-n1-001/page-0001")
 
 VALID_MANIFEST = {
     "@context": "http://iiif.io/api/presentation/3/context.json",
     "type": "Manifest",
     "items": [
         VALID_CANVAS,
-        {
-            "type": "Canvas",
-            "body": {
-                "service": [
-                    {"id": "https://iiif.zasqua.org/co-ahrb-n1-001/page-0099"}
-                ]
-            },
-        },
+        _make_canvas("https://iiif.zasqua.org/co-ahrb-n1-001/page-0099"),
     ],
 }
 
