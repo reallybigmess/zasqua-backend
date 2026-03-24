@@ -2,6 +2,28 @@
 
 All notable changes to the Zasqua backend will be documented in this file. Format based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0] — 2026-03-14
+
+AHRB volume ingest pipeline — tiled 542 volumes (~394K images, ~2.2 TB) to Cloudflare R2 with IIIF manifests and verification tooling.
+
+### Added
+
+- IIIF tiling shared module and Dropbox volume ingest script (`ingest_dropbox_volumes.py`)
+- Volume manifest generator from preservation inventory JSON
+- DigitalOcean droplet provisioning, configuration, and deployment scripts for parallel tiling
+- Orchestration scripts with process guards, verbose logging, and strict error handling
+- Spot-check and bulk-count verification scripts for tile validation
+- PE-BN vocabulary and M2 field extensions in import scripts
+
+### Changed
+
+- rclone tuning for R2 uploads (128 transfers, 64 checkers, retries for transient failures)
+
+### Removed
+
+- Dead Meilisearch integration (search module, management command, view, URL route, settings)
+- Unused `psycopg2-binary` dependency
+
 ## [0.3.0] — 2026-02-21
 
 METS metadata export, description page metadata improvements, and title improvement for Colombian repositories.
