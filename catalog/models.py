@@ -74,16 +74,16 @@ class Description(MPTTModel):
     """
 
     class Level(models.TextChoices):
-        FONDS = 'fonds', 'Fondo'
-        SUBFONDS = 'subfonds', 'Subfondo'
-        SERIES = 'series', 'Serie'
-        SUBSERIES = 'subseries', 'Subserie'
-        FILE = 'file', 'Expediente'
-        ITEM = 'item', 'Unidad documental'
+        FONDS = 'fonds', 'Fonds'
+        SUBFONDS = 'subfonds', 'Subfonds'
+        SERIES = 'series', 'Series'
+        SUBSERIES = 'subseries', 'Subseries'
+        FILE = 'file', 'File'
+        ITEM = 'item', 'Item'
         # Flexible
-        COLLECTION = 'collection', 'Coleccion'
-        SECTION = 'section', 'Seccion'
-        VOLUME = 'volume', 'Tomo'
+        COLLECTION = 'collection', 'Collection'
+        SECTION = 'section', 'Section'
+        VOLUME = 'volume', 'Volume'
 
     class ResourceType(models.TextChoices):
         TEXT = 'text', 'Text'
@@ -206,9 +206,9 @@ class Entity(models.Model):
     """
 
     class EntityType(models.TextChoices):
-        PERSON = 'person', 'Persona'
-        FAMILY = 'family', 'Familia'
-        CORPORATE = 'corporate', 'Entidad corporativa'
+        PERSON = 'person', 'Person'
+        FAMILY = 'family', 'Family'
+        CORPORATE = 'corporate', 'Corporate entity'
 
     # --- Identity (ISAAR 5.1) ---
     entity_code = models.CharField(max_length=8, blank=True, null=True, db_index=True,
@@ -223,7 +223,7 @@ class Entity(models.Model):
     honorific = models.CharField(max_length=100, blank=True,
                                  help_text='Primary form of address (Don, Fray, Dr.)')
     primary_function = models.CharField(max_length=300, blank=True,
-                                        help_text='Most notable office/role (Gobernador de Popayán)')
+                                        help_text='Most notable office/role (Governor of Popayán)')
 
     # --- Variants ---
     name_variants = models.JSONField(default=list, blank=True)
@@ -288,9 +288,9 @@ class EntityFunction(models.Model):
     """
 
     class Certainty(models.TextChoices):
-        CERTAIN = 'certain', 'Cierto'
+        CERTAIN = 'certain', 'Certain'
         PROBABLE = 'probable', 'Probable'
-        POSSIBLE = 'possible', 'Posible'
+        POSSIBLE = 'possible', 'Possible'
 
     entity = models.ForeignKey(Entity, on_delete=models.CASCADE,
                                related_name='known_functions')
@@ -336,18 +336,18 @@ class Place(models.Model):
     """
 
     class PlaceType(models.TextChoices):
-        COUNTRY = 'country', 'Pais'
-        REGION = 'region', 'Region/Audiencia'
-        DEPARTMENT = 'department', 'Departamento'
-        PROVINCE = 'province', 'Provincia'
+        COUNTRY = 'country', 'Country'
+        REGION = 'region', 'Region'
+        DEPARTMENT = 'department', 'Department'
+        PROVINCE = 'province', 'Province'
         PARTIDO = 'partido', 'Partido (colonial)'
-        CITY = 'city', 'Ciudad'
-        TOWN = 'town', 'Villa/Pueblo'
-        PARISH = 'parish', 'Parroquia'
+        CITY = 'city', 'City'
+        TOWN = 'town', 'Town'
+        PARISH = 'parish', 'Parish'
         HACIENDA = 'hacienda', 'Hacienda'
-        MINE = 'mine', 'Real de minas'
-        RIVER = 'river', 'Rio'
-        OTHER = 'other', 'Otro'
+        MINE = 'mine', 'Mine'
+        RIVER = 'river', 'River'
+        OTHER = 'other', 'Other'
 
     # --- Identity ---
     place_code = models.CharField(max_length=8, blank=True, null=True, unique=True,
@@ -432,45 +432,45 @@ class DescriptionEntity(models.Model):
 
     class Role(models.TextChoices):
         # General
-        CREATOR = 'creator', 'Creador'
-        AUTHOR = 'author', 'Autor'
+        CREATOR = 'creator', 'Creator'
+        AUTHOR = 'author', 'Author'
         EDITOR = 'editor', 'Editor'
-        PUBLISHER = 'publisher', 'Impresor/Editorial'
+        PUBLISHER = 'publisher', 'Publisher'
         # Correspondence
-        SENDER = 'sender', 'Remitente'
-        RECIPIENT = 'recipient', 'Destinatario'
+        SENDER = 'sender', 'Sender'
+        RECIPIENT = 'recipient', 'Recipient'
         # Mentions
-        MENTIONED = 'mentioned', 'Mencionado'
-        SUBJECT = 'subject', 'Tema'
+        MENTIONED = 'mentioned', 'Mentioned'
+        SUBJECT = 'subject', 'Subject'
         # Notarial/legal
-        SCRIBE = 'scribe', 'Escribano'
-        WITNESS = 'witness', 'Testigo'
-        NOTARY = 'notary', 'Notario'
+        SCRIBE = 'scribe', 'Scribe'
+        WITNESS = 'witness', 'Witness'
+        NOTARY = 'notary', 'Notary'
         # Visual materials
-        PHOTOGRAPHER = 'photographer', 'Fotografo'
-        ARTIST = 'artist', 'Artista'
+        PHOTOGRAPHER = 'photographer', 'Photographer'
+        ARTIST = 'artist', 'Artist'
         # Legal proceedings
-        PLAINTIFF = 'plaintiff', 'Demandante'
-        DEFENDANT = 'defendant', 'Demandado'
-        PETITIONER = 'petitioner', 'Peticionario'
-        JUDGE = 'judge', 'Juez'
-        APPELLANT = 'appellant', 'Apelante'
+        PLAINTIFF = 'plaintiff', 'Plaintiff'
+        DEFENDANT = 'defendant', 'Defendant'
+        PETITIONER = 'petitioner', 'Petitioner'
+        JUDGE = 'judge', 'Judge'
+        APPELLANT = 'appellant', 'Appellant'
         # Administrative
-        OFFICIAL = 'official', 'Oficial'
+        OFFICIAL = 'official', 'Official'
         # Family / personal
-        HEIR = 'heir', 'Heredero'
-        ALBACEA = 'albacea', 'Albacea'
-        SPOUSE = 'spouse', 'Conyuge'
-        VICTIM = 'victim', 'Victima'
+        HEIR = 'heir', 'Heir'
+        ALBACEA = 'albacea', 'Executor'
+        SPOUSE = 'spouse', 'Spouse'
+        VICTIM = 'victim', 'Victim'
         # Transactions
-        GRANTOR = 'grantor', 'Otorgante'
-        DONOR = 'donor', 'Donante'
-        SELLER = 'seller', 'Vendedor'
-        BUYER = 'buyer', 'Comprador'
-        MORTGAGOR = 'mortgagor', 'Deudor hipotecario'
-        MORTGAGEE = 'mortgagee', 'Acreedor hipotecario'
-        CREDITOR = 'creditor', 'Acreedor'
-        DEBTOR = 'debtor', 'Deudor'
+        GRANTOR = 'grantor', 'Grantor'
+        DONOR = 'donor', 'Donor'
+        SELLER = 'seller', 'Seller'
+        BUYER = 'buyer', 'Buyer'
+        MORTGAGOR = 'mortgagor', 'Mortgagor'
+        MORTGAGEE = 'mortgagee', 'Mortgagee'
+        CREDITOR = 'creditor', 'Creditor'
+        DEBTOR = 'debtor', 'Debtor'
 
     description = models.ForeignKey(Description, on_delete=models.CASCADE,
                                     related_name='entity_links')
@@ -483,9 +483,9 @@ class DescriptionEntity(models.Model):
 
     # Documentary styling (evidence layer)
     honorific = models.CharField(max_length=100, blank=True,
-                                 help_text='Honorific as recorded in this document (Don, Fray)')
+                                 help_text='Honorific as recorded in this document (Don, Dr., Fray)')
     function = models.CharField(max_length=300, blank=True,
-                                help_text='Function/office as recorded (Gobernador de Popayán)')
+                                help_text='Function/office as recorded (Governor of Popayán)')
     name_as_recorded = models.CharField(max_length=500, blank=True,
                                         help_text='Full name string as appears in document')
 
@@ -515,13 +515,13 @@ class DescriptionPlace(models.Model):
     """
 
     class Role(models.TextChoices):
-        CREATED = 'created', 'Lugar de creacion'
-        SUBJECT = 'subject', 'Tema/Asunto'
-        MENTIONED = 'mentioned', 'Mencionado'
-        SENT_FROM = 'sent_from', 'Enviado desde'
-        SENT_TO = 'sent_to', 'Enviado a'
-        PUBLISHED = 'published', 'Publicado en'
-        VENUE = 'venue', 'Lugar del acto'
+        CREATED = 'created', 'Created'
+        SUBJECT = 'subject', 'Subject'
+        MENTIONED = 'mentioned', 'Mentioned'
+        SENT_FROM = 'sent_from', 'Sent from'
+        SENT_TO = 'sent_to', 'Sent to'
+        PUBLISHED = 'published', 'Published'
+        VENUE = 'venue', 'Venue'
 
     description = models.ForeignKey(Description, on_delete=models.CASCADE,
                                     related_name='place_links')
