@@ -1,7 +1,7 @@
 ## What is this?
 Django backend to [Zasqua](https://github.com/neogranadina/zasqua). Generates the bare minimum files you need to run the frontend locally. 
 
-All modifications are done organically by me and I'm not associated with the wider Zasqua project, AMPL, etc.
+All modifications are done organically by me and I'm not associated with the main Zasqua project, AMPL, etc.
 
 ## Known issues/areas to improve
 - IIIF/METS stuff doesn't work, though IIIF certainly works with the frontend, just not manifest generation.
@@ -33,7 +33,7 @@ Quick db setup:
 ## Export:
 - `python manage.py export_frontend_data` exports descriptions.json, repositories.json, children/*
 - `python manage.py export_entity_place` exports entities.json, places.json, entity_links.json, place_links.json
-- Copy everything in export/ to **export/** in your zasqua-frontend base folder
+- Copy everything in exports/ to **export/** (note the folder names) in your zasqua-frontend base folder
 - [Run the frontend](https://github.com/reallybigmess/zasqua-frontend#getting-started)
 
 ## To-Do
