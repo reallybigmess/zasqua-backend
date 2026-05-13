@@ -1,3 +1,3 @@
 #!/bin/bash
 source $(dirname "$(realpath $0)")/../venv/bin/activate && \
-        python3 manage.py runserver 3000 &
+        python3 $(dirname "$(realpath $0)")/../manage.py runserver 3000 &

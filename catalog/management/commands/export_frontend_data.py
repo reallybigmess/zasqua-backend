@@ -166,6 +166,7 @@ class Command(BaseCommand):
                 'uniform_title', 'section_title', 'pages',
                 'creator_display', 'place_display',
                 'has_digital', 'iiif_manifest_url', 'lft', 'rght',
+                'created_at', 'updated_at',
             )
         )
 
@@ -258,6 +259,8 @@ class Command(BaseCommand):
                 'pages': d['pages'],
                 'creator_display': d['creator_display'],
                 'place_display': d['place_display'],
+                'created_at': d['created_at'].isoformat(),
+                'modified_at': d['updated_at'].isoformat()
             })
 
         desc_path = os.path.join(output_dir, 'descriptions.json')
@@ -304,7 +307,7 @@ class Command(BaseCommand):
                 'notes': repo.notes,
                 'enabled': repo.enabled,
                 'created_at': repo.created_at.isoformat(),
-                'updated_at': repo.updated_at.isoformat(),
+                'modified_at': repo.updated_at.isoformat(),
                 'description_count': desc_counts.get(repo.code, 0),
                 'image_reproduction_text': _IMAGE_REPRODUCTION.get(
                     repo.code, ''),

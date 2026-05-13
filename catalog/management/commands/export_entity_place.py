@@ -125,7 +125,7 @@ class Command(BaseCommand):
                 'admin_level_2': d['admin_level_2'],
 
                 'created_at': d['created_at'].isoformat(),
-                'updated_at': d['updated_at'].isoformat(),
+                'modified_at': d['updated_at'].isoformat(),
             })
 
             #print(place_records)
@@ -202,7 +202,7 @@ class Command(BaseCommand):
             .values(
                 'id', 'entity_code', 'display_name', 'sort_name', 'entity_type', 'given_name', 'surname',
                 'honorific', 'date_start', 'date_end', 'name_variants', 'primary_function',
-                'functions', 'dates_of_existence', 'history', 'viaf_id', 'wikidata_id',
+                'functions', 'dates_of_existence', 'history', 'viaf_id', 'wikidata_id', 'created_at', 'updated_at',
             )
         )
 
@@ -238,6 +238,8 @@ class Command(BaseCommand):
                 'viaf_id': d['viaf_id'],
                 'wikidata_id': d['wikidata_id'],
                 # 'date_formatted': d['']
+                'created_at': d['created_at'].isoformat(),
+                'modified_at': d['updated_at'].isoformat(),
             })
 
             #print(entity_records)
